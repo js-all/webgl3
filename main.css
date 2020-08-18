@@ -1,0 +1,17 @@
+canvas {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgb(0, 0, 0);
+    cursor: none;
+}
+
+body {
+    background-color: rgb(29, 29, 29);
+}
+
+#fps {
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
