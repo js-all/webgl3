@@ -1,7 +1,7 @@
 import rh from './resize'
 import utils from './utils'
 import H3D from './class'
-import { vec3, vec4 } from 'gl-matrix'
+import { vec3, vec4, mat4 } from 'gl-matrix'
 
 
 const { rad, deg } = utils;
@@ -15,28 +15,47 @@ const mousePos = {
     x: 0,
     y: 0
 }
+const shaders = {
+    frag: '/shaders/fragmentShader.glsl',
+    vert: '/shaders/vertexShader.glsl'
+}
+const UIShaders = {
+    frag: '/shaders/UIFragmentShader.glsl',
+    vert: '/shaders/UIVertexShader.glsl'
+}
 const sensibility = .5;
 const KeysDown: Set<number> = new Set();
 
-const world = new H3D.World(rad(45), .1, 100, gl, [rad(-90), 0, 0], [0, 0, 0], [.2, .5, .2], [{
-    color: [.5, .5, .5],
+const lightPos: vec3 = [0, -2, 6];
+
+const world = new H3D.World(rad(45), .1, 100, gl, [rad(-90), 0, 0], [0, 0, 0], [.2, .2, .2], [{
+    color: [.1, .1, .1],
     dirrection: [0, -1, 1]
-}], []);
-const c = new H3D.Cube(world, '/shaders/vertexShader.glsl', '/shaders/FragmentShader.glsl', utils.createTextureFromColor(gl, [0, 255, 0, 255]), .5, [1, 0, 4])
-const ico = new H3D.Icosahedron(world, '/shaders/vertexShader.glsl', '/shaders/fragmentShader.glsl', utils.createTextureFromColor(gl, [255, 0, 0, 255]), .5, [1, 0, 0]);
-//const test = new H3D.UIPlane(0, 0, 100, 100, utils.createTextureFromColor(gl, [255, 255, 255, 255]), world, '/shaders/UIVertexShader.glsl', '/shaders/UIFragmentShader.glsl');
+}], [
+    {
+        color: [.5, .5, .5],
+        position: lightPos
+    }]);
+const c = new H3D.Cube(world, shaders.vert, shaders.frag, utils.createTextureFromColor(gl, [0, 255, 0, 255]), .5, [1, 0, 4])
+const ico = new H3D.Icosphere(world, shaders.vert, shaders.frag, 2, utils.loadTexture(gl, '/img/cursor.png'), .5, [1, 0, 0]);
+//const test = new H3D.UIPlane(0, 0, 100, 100, utils.createTextureFromColor(gl, [255, 255, 255, 255]), world, UIShaders.vert, UIShaders.frag);
 
 document.body.appendChild(canvas)
-
+let i = 0;
 world.aspect = cw / ch;
 function draw() {
+    const pos: vec3 = [0, Math.cos(rad((i * 2) % 360)) / 4, 0];
+    vec3.transformMat4(pos, pos, mat4.invert(mat4.create(), world.viewMatrix));
+    world.pointLights[0].position = pos;
     world.updateValues();
     world.render();
+    i++;
     requestAnimationFrame(draw);
 }
+console.log(ico)
 
 function play() {
-    const fac = .2;
+    const fac = .01;
     let vec: vec4 = vec4.create();
     const add = (x: number, y: number, z: number) => vec4.add(vec, vec, vec4.set(vec4.create(), x, y, z, 1));
     // z

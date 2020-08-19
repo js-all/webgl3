@@ -14,6 +14,7 @@
   uniform highp float uReflectivity;
   uniform highp int uExponant;
 
+
 void main() {
   highp vec4 texelColor = texture2D(uSampler, vTextureCoord);
   

@@ -10,7 +10,6 @@ const {
 } = utils;
 
 type N3 = [number, number, number];
-type N4 = [number, number, number, number];
 
 const MAXLIGHT = 32;
 
@@ -166,28 +165,19 @@ class Primitive {
         });
     }
     computeNormals(): vec3[] {
-        const res: vec3[] = [];
-        for (let i = 0; i < this.points.length; i++) {
-            let inTri: number = -1;
-            let thisI = 0;
-            for (let _j = 0; _j < this.tris.length; _j++) {
-                const j = this.tris[_j];
-                if (i === j[0] || i === j[1] || i === j[2]) {
-                    inTri = _j;
-                    thisI = j.indexOf(i);
-                    break;
-                }
-            }
-            if (inTri === -1) {
-                // alone vertex, can't compute normal
-                res.push([0, 1, 0])
-                continue;
-            }
-            const v1 = vec3.subtract([0, 0, 0], this.points[(thisI - 1 < 0 ? 2 : thisI - 1)], this.points[i]);
-            const v2 = vec3.subtract([0, 0, 0], this.points[i], this.points[(thisI + 1) % 3]);
-            const n = vec3.cross([0, 0, 0], v1, v2);
-            vec3.divide(n, n, new Array(3).fill(vec3.len(n)));
-            res.push(n);
+        const res: vec3[] = <vec3[]>(new Array(this.points.length).fill([0, 0, 0]))
+        for (let i of this.tris) {
+            // just to be able to copy what told on stackoverflow im desparate here
+            // https://stackoverflow.com/questions/29488574/how-to-calculate-normals-for-an-Icosphere/44351078
+            const v = (v: number) => this.points[i[v - 1]];
+            const p12 = vec3.subtract(vec3.create(), v(2), v(1));
+            const p23 = vec3.subtract(vec3.create(), v(3), v(2));
+            const n = vec3.cross(vec3.create(), p12, p23);
+            const l = vec3.len(n);
+            vec3.div(n, n, vec3.fromValues(l, l, l));
+            res[i[0]] = n;
+            res[i[1]] = n;
+            res[i[2]] = n;
         }
         return res;
     }
@@ -206,6 +196,8 @@ class Primitive {
         this.modelViewMatrix = mat4.create();
         mat4.multiply(this.modelViewMatrix, this.world.viewMatrix, this.modelMatrix);
         if (worldCall) {
+            this.pointLights = this.world.pointLights;
+            this.directionalLights = this.world.directionalLights;
             const res: PointLight[] = [];
             for (let i of this.pointLights) {
                 res.push({
@@ -224,7 +216,7 @@ class Primitive {
      * i would have liked to to it in a shader to avoid computing matricies multiplication on the cpu that much
      * but i don't want to use more than two passes so i'll do it this way
      */
-    getBoundingBox() {
+    get2dScreenBoundingBox() {
         const transformedVerticiesX: number[] = [];
         const transformedVerticiesY: number[] = [];
         for (let v of this.points) {
@@ -255,6 +247,23 @@ class Primitive {
                 dx: 0,
                 dy: 0
             }
+        }
+    }
+    get3dBoundingBox() {
+        const Ys: number[] = [];
+        const Xs: number[] = [];
+        const Zs: number[] = [];
+        for (let i of this.points) {
+            const transformedVerticie = vec3.transformMat4(vec3.create(), i, this.modelMatrix);
+            Xs.push(transformedVerticie[0]);
+            Ys.push(transformedVerticie[1]);
+            Zs.push(transformedVerticie[2]);
+        }
+        const min: vec3 = vec3.fromValues(Math.min(...Xs), Math.min(...Ys), Math.min(...Zs));
+        const max: vec3 = vec3.fromValues(Math.max(...Xs), Math.max(...Ys), Math.max(...Zs));
+        return {
+            min: min,
+            max: max
         }
     }
     initBuffer(): BufferData {
@@ -739,143 +748,74 @@ class UIPlane extends Plane {
     }
 }
 
-class Icosahedron extends Primitive {
+class Icosphere extends Primitive {
     // just to avoid computing it everytime
     private static phi = (1 + Math.sqrt(5)) / 2;
-    constructor(world: World, vertexShaderUrl: string, fragmentShaderUrl: string, texture: WebGLTexture, reflectivity: number, translation: vec3 = [0, 0, 0], scale: vec3 = [1, 1, 1], rotation: vec3 = [0, 0, 0]) {
-        const l = Icosahedron.phi;
+    constructor(world: World, vertexShaderUrl: string, fragmentShaderUrl: string, refinement: number, texture: WebGLTexture, reflectivity: number, translation: vec3 = [0, 0, 0], scale: vec3 = [1, 1, 1], rotation: vec3 = [0, 0, 0]) {
         const h = 1;
+        const l = Icosphere.phi * h;
         const t: [number, number][] = [];
-        for (let i of new Array(20)) {
+        // thanks stackoverflow !
+        var packedTrisPoints: [vec3, vec3, vec3][] =
+            normalizePackedTriVecArray([
+                [[-h, l, 0], [0, h, l], [h, l, 0]],
+                [[h, l, 0], [0, h, -l], [-h, l, 0]],
+                [[h, l, 0], [0, h, l], [l, 0, h]],
+                [[h, l, 0], [l, 0, -h], [0, h, -l]],
+                [[l, 0, -h], [h, l, 0], [l, 0, h]],
+                [[-h, -l, 0], [h, -l, 0], [0, -h, l]],
+                [[-h, -l, 0], [0, -h, -l], [h, -l, 0]],
+                [[-h, -l, 0], [0, -h, l], [-l, 0, h]],
+                [[-h, -l, 0], [-l, 0, -h], [0, -h, -l]],
+                [[-l, 0, h], [-l, 0, -h], [-h, -l, 0]],
+                [[-h, l, 0], [-l, 0, h], [0, h, l]],
+                [[-h, l, 0], [0, h, -l], [-l, 0, -h]],
+                [[-h, l, 0], [-l, 0, -h], [-l, 0, h]],
+                [[h, -l, 0], [l, 0, h], [0, -h, l]],
+                [[h, -l, 0], [0, -h, -l], [l, 0, -h]],
+                [[h, -l, 0], [l, 0, -h], [l, 0, h]],
+                [[0, -h, -l], [-l, 0, -h], [0, h, -l]],
+                [[0, -h, -l], [0, h, -l], [l, 0, -h]],
+                [[0, h, l], [-l, 0, h], [0, -h, l]],
+                [[0, h, l], [0, -h, l], [l, 0, h]]
+
+            ]);
+        for (let c of new Array(refinement)) {
+            const res: [vec3, vec3, vec3][] = [];
+            for (let i of packedTrisPoints) {
+                const halfway = (po: vec3, pd: vec3) => {
+                    const res = vec3.create();
+                    vec3.subtract(res, pd, po);
+                    vec3.mul(res, res, [.5, .5, .5]);
+                    vec3.add(res, po, res);
+                    // set length to one so the vector lies on the unit sphere
+                    vec3.normalize(res, res);
+                    return res;
+                };
+                // compute the points
+                const [p1, p2, p3] = i;
+                const [p4, p5, p6] = [halfway(p1, p2), halfway(p2, p3), halfway(p3, p1)];
+                // create the triangles
+                const tris: [vec3, vec3, vec3][] = [
+                    [p1, p4, p6],
+                    [p4, p2, p5],
+                    [p6, p5, p3],
+                    [p4, p5, p6]
+                ]
+                res.push(...tris);
+            }
+            packedTrisPoints = res;
+        }
+        const { tris, points } = unpackTriVecArray(packedTrisPoints);
+        for (let i of new Array(packedTrisPoints.length)) {
             t.push([0, 0],
                 [1, 0],
                 [1, 1],
                 [0, 1]);
         }
         super(
-            [
-                // PAIN AND SUFFERING,
-                // LOTS OF IT
-                //
-                // [-h, l, 0],  0
-                // [h, l, 0],   1
-                // [-h, -l, 0], 2
-                // [h, -l, 0],  3
-
-                // [0, -h, l],  4
-                // [0, h, l],   5
-                // [0, -h, -l], 6
-                // [0, h, -l],  7
-
-                // [l, 0, -h],  8
-                // [l, 0, h],   9
-                // [-l, 0, -h], 10
-                // [-l, 0, h],  11
-
-                // f0: 0 2 5
-                [-h, l, 0], // 0
-                [h, l, 0],  // 1
-                [0, h, l],  // 2
-                // f1: 0 5 11
-                [-h, l, 0], // 3
-                [0, h, l],  // 4
-                [-l, 0, h], // 5
-                // f2: 0 11 10
-                [-h, l, 0], // 6
-                [-l, 0, h], // 7 
-                [-l, 0, -h],// 8
-                // f3: 0 10 7 
-                [-h, l, 0], // 9
-                [-l, 0, -h],// 10
-                [0, h, -l], // 11
-                // f4: 0 7 1
-                [-h, l, 0], // 12
-                [0, h, -l], // 13
-                [h, l, 0],  // 14
-                // f5: 1 9 5
-                [h, l, 0],  // 15
-                [l, 0, h],  // 16
-                [0, h, l],  // 17
-                // f6: 5 9 4
-                [0, h, l],  // 18
-                [l, 0, h],  // 19
-                [0, -h, l], // 20
-                // f7: 5 4 11
-                [0, h, l],  // 21
-                [0, -h, l], // 22
-                [-l, 0, h], // 23
-                // f8: 11 4 2
-                [-l, 0, h], // 24
-                [0, -h, l], // 25
-                [-h, -l, 0],// 26
-                // f9: 11 2 10
-                [-l, 0, h], // 27
-                [-h, -l, 0],// 28
-                [-l, 0, -h],// 29
-                // f10: 10 2 6
-                [-l, 0, -h],// 30
-                [-h, -l, 0],// 31
-                [0, -h, -l],// 32
-                // f11: 10 6 7
-                [-l, 0, -h],// 33
-                [0, -h, -l],// 34
-                [0, h, -l], // 35
-                // f12: 7 6 8
-                [0, h, -l], // 36
-                [0, -h, -l],// 37
-                [l, 0, -h], // 38
-                // f13: 7 8 1
-                [0, h, -l], // 39
-                [l, 0, -h], // 40
-                [h, l, 0],  // 41
-                // f14: 1 8 9
-                [h, l, 0],  // 42
-                [l, 0, -h], // 43
-                [l, 0, h],  // 44
-                // f15: 3 4 9
-                [h, -l, 0], // 45
-                [0, -h, l], // 46
-                [l, 0, h],  // 47
-                // f16: 3 2 4
-                [h, -l, 0], // 48
-                [-h, -l, 0],// 49
-                [0, -h, l], // 50
-                // f17: 3 6 2
-                [h, -l, 0], // 51
-                [0, -h, -l],// 52
-                [-h, -l, 0],// 53
-                // f18: 3 8 6
-                [h, -l, 0], // 54
-                [l, 0, -h], // 55
-                [0, -h, -l],// 56
-                // f19: 3 9 8
-                [h, -l, 0], // 57
-                [l, 0, h],  // 58
-                [l, 0, -h], // 59
-                // 60 total verticies
-            ],
-            [
-                [0, 1, 2],
-                [3, 4, 5],
-                [6, 7, 8],
-                [9, 10, 11],
-                [12, 13, 14],
-                [15, 16, 17],
-                [18, 19, 20],
-                [21, 22, 23],
-                [24, 25, 26],
-                [27, 28, 29],
-                [30, 31, 32],
-                [33, 34, 35],
-                [36, 37, 38],
-                [39, 40, 41],
-                [42, 43, 44],
-                [45, 46, 47],
-                [48, 49, 50],
-                [51, 52, 53],
-                [54, 55, 56],
-                [57, 58, 59]
-            ],
+            points,
+            tris,
             null,
             world,
             vertexShaderUrl,
@@ -906,6 +846,30 @@ interface PointLight {
     color: N3
 }
 
+function unpackTriVecArray(arr: [vec3, vec3, vec3][]) {
+    const tris: N3[] = [];
+    const points: vec3[] = [];
+    for (let i of arr) {
+        points.push(...i);
+        tris.push([points.length - 3, points.length - 2, points.length - 1]);
+    }
+    return {
+        tris: tris,
+        points: points
+    }
+}
+
+function normalizePackedTriVecArray(arr: [vec3, vec3, vec3][]) {
+    const res: [vec3, vec3, vec3][] = [];
+    for (let i of arr) {
+        res.push([
+            vec3.normalize(vec3.create(), i[0]),
+            vec3.normalize(vec3.create(), i[1]),
+            vec3.normalize(vec3.create(), i[2])
+        ]);
+    }
+    return res;
+}
 
 export default {
     World: World,
@@ -913,5 +877,5 @@ export default {
     Cube: Cube,
     Plane: Plane,
     UIPlane: UIPlane,
-    Icosahedron: Icosahedron
+    Icosphere: Icosphere
 }
