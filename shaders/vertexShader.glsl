@@ -12,8 +12,9 @@
   varying highp vec3 vFragPos;
 
   void main() {
-    gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+    highp vec4 p = uModelViewMatrix * aVertexPosition;
+    gl_Position = uProjectionMatrix * p;
     vTextureCoord = aTextureCoord;
-    vFragPos = vec3(uModelViewMatrix * aVertexPosition);
-    vTransformedNormal = uNormalMatrix * aVertexNormal;
+    vFragPos = vec3(p);
+    vTransformedNormal = uNormalMatrix * vec4(aVertexNormal.xyz, 0.0);
   }

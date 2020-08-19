@@ -12,8 +12,8 @@ canvas.height = ch;
 canvas.width = cw;
 const gl = <WebGLRenderingContext>canvas.getContext('webgl');
 const mousePos = {
-    x: 0,
-    y: 0
+    x: cw / 2,
+    y: ch / 2
 }
 const shaders = {
     frag: '/shaders/fragmentShader.glsl',
@@ -23,30 +23,33 @@ const UIShaders = {
     frag: '/shaders/UIFragmentShader.glsl',
     vert: '/shaders/UIVertexShader.glsl'
 }
-const sensibility = .5;
+const sensibility = .25;
 const KeysDown: Set<number> = new Set();
 
 const lightPos: vec3 = [0, -2, 6];
 
-const world = new H3D.World(rad(45), .1, 100, gl, [rad(-90), 0, 0], [0, 0, 0], [.2, .2, .2], [{
-    color: [.1, .1, .1],
-    dirrection: [0, -1, 1]
-}], [
-    {
-        color: [.5, .5, .5],
-        position: lightPos
-    }]);
-const c = new H3D.Cube(world, shaders.vert, shaders.frag, utils.createTextureFromColor(gl, [0, 255, 0, 255]), .5, [1, 0, 4])
-const ico = new H3D.Icosphere(world, shaders.vert, shaders.frag, 2, utils.loadTexture(gl, '/img/cursor.png'), .5, [1, 0, 0]);
+const world = new H3D.World(rad(45), .1, 100, gl, [rad(-180), rad(-180), 0], [0, 0, 0], [.2, .2, .2], [], [{
+    color: <[number, number, number]>[0, 0, 0].fill(.5),
+    position: [5, -5, -2]
+}]);
+//const c = new H3D.Cube(world, shaders.vert, shaders.frag, utils.createTextureFromColor(gl, [0, 255, 0, 255]), .5, [1, 0, 4])
+const ico = new H3D.Icosphere(world, shaders.vert, shaders.frag, 2, utils.createTextureFromColor(gl, [255, 50, 50, 255]), .5, [0, 0, -3], [.5, .5, .5]);
+//const crosshair = new H3D.UIPlane(cw / 2 - 10, ch / 2 - 10, cw / 2 + 10, ch / 2 + 10, utils.loadTexture(gl, '/img/cursor.png'), world, "/shaders/UIVertexShader.glsl", '/shaders/UIFragmentShader.glsl');
 //const test = new H3D.UIPlane(0, 0, 100, 100, utils.createTextureFromColor(gl, [255, 255, 255, 255]), world, UIShaders.vert, UIShaders.frag);
+
+ico.lightPointDiffuseFac = 1;
+ico.reflectivity = 1;
+ico.exponant = 99;
+ico.lightAmbiantFac = 1;
+ico.lightPointSpecularFac = 1;
 
 document.body.appendChild(canvas)
 let i = 0;
 world.aspect = cw / ch;
 function draw() {
-    const pos: vec3 = [0, Math.cos(rad((i * 2) % 360)) / 4, 0];
+    /*const pos: vec3 = [0, Math.cos(rad((i * 2) % 360)) / 4, 0];
     vec3.transformMat4(pos, pos, mat4.invert(mat4.create(), world.viewMatrix));
-    world.pointLights[0].position = pos;
+    //world.pointLights[0].position = pos;*/
     world.updateValues();
     world.render();
     i++;
@@ -99,13 +102,14 @@ window.addEventListener('mousemove', e => {
         mousePos.x += e.movementX * canvas.width / canvas.clientWidth;
         mousePos.y += e.movementY * canvas.height / canvas.clientHeight;
     }
-    world.cameraRotation[1] = mousePos.x / canvas.width * (Math.PI * 2) * sensibility;
-    world.cameraRotation[0] = mousePos.y / canvas.height * (Math.PI * 2) * -1 * sensibility;
+    ico.rotation[1] = mousePos.x / canvas.width * (Math.PI * 2) * sensibility;
+    ico.rotation[0] = mousePos.y / canvas.height * (Math.PI * 2) * -1 * sensibility;
 });
 var captured = false;
 canvas.addEventListener('click', e => {
     canvas.requestPointerLock();
     captured = true;
+    console.log(world.cameraRotation);
 });
 
 window.addEventListener('blur', () => {

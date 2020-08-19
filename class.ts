@@ -57,7 +57,10 @@ enum UniformTypes {
     "uniformMatrix4fv"
 }
 
-
+// TODO
+/**
+ * refector entire thing to use non duplicated verticies and cumpute duped one at init buffer or something
+ */
 
 class Primitive {
     static MAX_LIGHTS = 64;
@@ -87,7 +90,8 @@ class Primitive {
         "uPointLightsPositions", // 8
         "uPointLightsColor", // 9
         "uReflectivity", // 10
-        "uExponant" // 11
+        "uExponant", // 11
+        "uLightFac" // 12
     ];
     reflectivity: number;
     attributesLocations: number[] = [];
@@ -103,6 +107,10 @@ class Primitive {
     pointLights: PointLight[];
     movedPointLights: PointLight[] = [];
     exponant = 32;
+    lightAmbiantFac = 1;
+    lightDirDifuseFac = 1;
+    lightPointDiffuseFac = 1;
+    lightPointSpecularFac = 1;
     /**
      * new Primitive
      * @param points the points of the shape
@@ -135,7 +143,8 @@ class Primitive {
                 { method: UniformTypes.uniform3fv, location: 8, value: thisObj => { const res: number[] = []; thisObj.movedPointLights.map(v => res.push(...v.position)); while (res.length < Primitive.MAX_LIGHTS) { res.push(0, 0, 0) }; return [res] } },
                 { method: UniformTypes.uniform3fv, location: 9, value: thisObj => { const res: number[] = []; thisObj.pointLights.map(v => res.push(...v.color)); while (res.length < Primitive.MAX_LIGHTS) { res.push(0, 0, 0) }; return [res] } },
                 { method: UniformTypes.uniform1f, location: 10, value: thisObj => [thisObj.reflectivity] },
-                { method: UniformTypes.uniform1i, location: 11, value: thisObj => [thisObj.exponant] }
+                { method: UniformTypes.uniform1i, location: 11, value: thisObj => [thisObj.exponant] },
+                { method: UniformTypes.uniform4fv, location: 12, value: thisObj => [[thisObj.lightAmbiantFac, thisObj.lightDirDifuseFac, thisObj.lightPointDiffuseFac, thisObj.lightPointSpecularFac]] }
             ],
             indexs: <WebGLBuffer>this.gl.createBuffer(),
             indexsLength: 0
@@ -423,7 +432,8 @@ class World {
             gl.enable(gl.DEPTH_TEST);
             gl.depthFunc(gl.LEQUAL);
             gl.enable(gl.BLEND);
-            gl.disable(gl.CULL_FACE);
+            //gl.enable(gl.CULL_FACE);
+            //gl.cullFace(gl.BACK);
         },
         gl => {
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
