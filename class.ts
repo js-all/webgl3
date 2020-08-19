@@ -1,5 +1,4 @@
-import Vector3 from './vector3'
-import { mat4, vec4, vec2 } from 'gl-matrix'
+import { mat4, vec4, vec3 } from 'gl-matrix'
 import { v4 as uuidV4 } from 'uuid';
 import utils from './utils'
 // i don't know why i can't do import { createBuffer, ...} from './utils' so ill do it this way
@@ -63,15 +62,15 @@ enum UniformTypes {
 
 class Primitive {
     static MAX_LIGHTS = 64;
-    points: Vector3[];
+    points: vec3[];
     tris: N3[];
-    normals: Vector3[];
+    normals: vec3[];
     private ready: boolean = false;
     world: World;
     uuid: string = uuidV4();
-    scale: Vector3;
-    translation: Vector3;
-    rotation: Vector3;
+    scale: vec3;
+    translation: vec3;
+    rotation: vec3;
     attributes: string[] = [
         "aVertexPosition",
         "aTextureCoord",
@@ -105,7 +104,22 @@ class Primitive {
     pointLights: PointLight[];
     movedPointLights: PointLight[] = [];
     exponant = 32;
-    constructor(points: Vector3[], tris: N3[], normals: Vector3[], world: World, vertexShaderUrl: string, fragmentShaderUrl: string, textureCoordinates: [number, number][], texture: WebGLTexture, reflectivity: number, translation: Vector3 = Vector3.null, scale: Vector3 = new Vector3(1, 1, 1), rotation: Vector3 = Vector3.null) {
+    /**
+     * new Primitive
+     * @param points the points of the shape
+     * @param tris the faces
+     * @param normals the normal, use null for them to be procedurally computed
+     * @param world the wolrd Ovject that element will be in
+     * @param vertexShaderUrl the url to the vertexShader
+     * @param fragmentShaderUrl the url to the Fragment Shader
+     * @param textureCoordinates the texture coordinates
+     * @param texture the webglTexture
+     * @param reflectivity how reflectif the object is 0 - 1
+     * @param translation the translation
+     * @param scale the scale
+     * @param rotation the rotation
+     */
+    constructor(points: vec3[], tris: N3[], normals: vec3[] | null, world: World, vertexShaderUrl: string, fragmentShaderUrl: string, textureCoordinates: [number, number][], texture: WebGLTexture, reflectivity: number, translation: vec3 = [0, 0, 0], scale: vec3 = [1, 1, 1], rotation: vec3 = [0, 0, 0]) {
         this.world = world;
         this.bufferData = {
             attributes: [],
@@ -114,12 +128,12 @@ class Primitive {
                 { method: UniformTypes.uniformMatrix4fv, location: 0, value: thisObj => [thisObj.world.projectionMatrix] },
                 { method: UniformTypes.uniformMatrix4fv, location: 1, value: thisObj => [thisObj.modelViewMatrix] },
                 { method: UniformTypes.uniform1i, location: 2, value: thisObj => [0] },
-                { method: UniformTypes.uniformMatrix4fv, location: 3, value: thisObj => { const out = mat4.invert(mat4.create(), thisObj.modelViewMatrix); return [mat4.transpose(out, out)] } },
+                { method: UniformTypes.uniformMatrix4fv, location: 3, value: thisObj => { const out = mat4.invert(mat4.create(), thisObj.modelViewMatrix); mat4.transpose(out, out); return [out] } },
                 { method: UniformTypes.uniform3fv, location: 4, value: thisObj => [thisObj.world.ambiantLight] },
                 { method: UniformTypes.uniform3fv, location: 5, value: thisObj => { const res: number[] = []; thisObj.directionalLights.map(v => res.push(...v.color)); while (res.length < Primitive.MAX_LIGHTS) { res.push(0, 0, 0) }; return [res] } },
-                { method: UniformTypes.uniform3fv, location: 6, value: thisObj => { const res: number[] = []; thisObj.directionalLights.map(v => res.push(...v.dirrection.toArray())); while (res.length < Primitive.MAX_LIGHTS) { res.push(0, 0, 0) }; return [res] } },
+                { method: UniformTypes.uniform3fv, location: 6, value: thisObj => { const res: number[] = []; thisObj.directionalLights.map(v => res.push(...v.dirrection)); while (res.length < Primitive.MAX_LIGHTS) { res.push(0, 0, 0) }; return [res] } },
                 { method: UniformTypes.uniformMatrix4fv, location: 7, value: thisObj => [thisObj.world.viewRotationMatrix] },
-                { method: UniformTypes.uniform3fv, location: 8, value: thisObj => { const res: number[] = []; thisObj.movedPointLights.map(v => res.push(...v.position.toArray())); while (res.length < Primitive.MAX_LIGHTS) { res.push(0, 0, 0) }; return [res] } },
+                { method: UniformTypes.uniform3fv, location: 8, value: thisObj => { const res: number[] = []; thisObj.movedPointLights.map(v => res.push(...v.position)); while (res.length < Primitive.MAX_LIGHTS) { res.push(0, 0, 0) }; return [res] } },
                 { method: UniformTypes.uniform3fv, location: 9, value: thisObj => { const res: number[] = []; thisObj.pointLights.map(v => res.push(...v.color)); while (res.length < Primitive.MAX_LIGHTS) { res.push(0, 0, 0) }; return [res] } },
                 { method: UniformTypes.uniform1f, location: 10, value: thisObj => [thisObj.reflectivity] },
                 { method: UniformTypes.uniform1i, location: 11, value: thisObj => [thisObj.exponant] }
@@ -130,7 +144,7 @@ class Primitive {
         this.reflectivity = reflectivity;
         this.points = points;
         this.tris = tris;
-        this.normals = normals;
+        this.normals = normals === null ? this.computeNormals() : normals;
         this.texture = texture;
         this.textureCoordinates = textureCoordinates;
         this.translation = translation;
@@ -151,18 +165,44 @@ class Primitive {
             throw new Error("Coudln't fetch shaders, probably a wrong url or an error in the shader itself");
         });
     }
+    computeNormals(): vec3[] {
+        const res: vec3[] = [];
+        for (let i = 0; i < this.points.length; i++) {
+            let inTri: number = -1;
+            let thisI = 0;
+            for (let _j = 0; _j < this.tris.length; _j++) {
+                const j = this.tris[_j];
+                if (i === j[0] || i === j[1] || i === j[2]) {
+                    inTri = _j;
+                    thisI = j.indexOf(i);
+                    break;
+                }
+            }
+            if (inTri === -1) {
+                // alone vertex, can't compute normal
+                res.push([0, 1, 0])
+                continue;
+            }
+            const v1 = vec3.subtract([0, 0, 0], this.points[(thisI - 1 < 0 ? 2 : thisI - 1)], this.points[i]);
+            const v2 = vec3.subtract([0, 0, 0], this.points[i], this.points[(thisI + 1) % 3]);
+            const n = vec3.cross([0, 0, 0], v1, v2);
+            vec3.divide(n, n, new Array(3).fill(vec3.len(n)));
+            res.push(n);
+        }
+        return res;
+    }
     /**
      * called to update the model matrix or by the world to update modelViewMatrix
-     * @param worldCall set to false by default for performance reason, no point in setting to true manually
+     * @param worldCall set to false by default only true when called from the world object for performance reason, no point in setting to true manually
      */
     updateMatricies(worldCall = false) {
         this.modelMatrix = mat4.create();
         mat4.identity(this.modelMatrix);
-        mat4.translate(this.modelMatrix, this.modelMatrix, this.translation.toArray());
-        mat4.rotate(this.modelMatrix, this.modelMatrix, this.rotation.x, [1, 0, 0]);
-        mat4.rotate(this.modelMatrix, this.modelMatrix, this.rotation.y, [0, 1, 0]);
-        mat4.rotate(this.modelMatrix, this.modelMatrix, this.rotation.z, [0, 0, 1]);
-        mat4.scale(this.modelMatrix, this.modelMatrix, this.scale.toArray());
+        mat4.translate(this.modelMatrix, this.modelMatrix, this.translation);
+        mat4.rotate(this.modelMatrix, this.modelMatrix, this.rotation[0], [1, 0, 0]);
+        mat4.rotate(this.modelMatrix, this.modelMatrix, this.rotation[1], [0, 1, 0]);
+        mat4.rotate(this.modelMatrix, this.modelMatrix, this.rotation[2], [0, 0, 1]);
+        mat4.scale(this.modelMatrix, this.modelMatrix, this.scale);
         this.modelViewMatrix = mat4.create();
         mat4.multiply(this.modelViewMatrix, this.world.viewMatrix, this.modelMatrix);
         if (worldCall) {
@@ -170,7 +210,7 @@ class Primitive {
             for (let i of this.pointLights) {
                 res.push({
                     color: i.color,
-                    position: Vector3.fromArray(<N3>vec4.transformMat4(vec4.create(), vec4.set(vec4.create(), i.position.x, i.position.y, i.position.z, 1), this.world.viewMatrix).filter((v: number, i: number) => i < 3))
+                    position: vec3.fromValues(...<N3>vec4.transformMat4(vec4.create(), vec4.fromValues(i.position[0], i.position[1], i.position[2], 1), this.world.viewMatrix).filter((v: number, i: number) => i < 3))
                 })
             }
             this.movedPointLights = res;
@@ -188,7 +228,7 @@ class Primitive {
         const transformedVerticiesX: number[] = [];
         const transformedVerticiesY: number[] = [];
         for (let v of this.points) {
-            const vec = vec4.set(vec4.create(), v.x, v.y, v.z, 1);
+            const vec = vec4.fromValues(v[0], v[1], v[2], 1);
             vec4.transformMat4(vec, vec, this.modelViewMatrix);
             vec4.transformMat4(vec, vec, this.world.projectionMatrix);
             // if w is less than 0 the object is off screen
@@ -222,7 +262,7 @@ class Primitive {
 
         const positions: number[] = [];
         const PBuffer = createBuffer(gl, "position");
-        this.points.forEach(v => positions.push(...v.toArray()));
+        this.points.forEach(v => positions.push(...v));
         gl.bindBuffer(gl.ARRAY_BUFFER, PBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
 
@@ -240,7 +280,7 @@ class Primitive {
 
         const normals: number[] = [];
         const NBuffer = createBuffer(gl, 'normals');
-        this.normals.forEach(v => normals.push(...v.toArray()));
+        this.normals.forEach(v => normals.push(...v));
         gl.bindBuffer(gl.ARRAY_BUFFER, NBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
         return {
@@ -353,8 +393,8 @@ class World {
     private _fov: number;
     projectionMatrix: mat4 = mat4.create();
     viewMatrix: mat4 = mat4.create();
-    private _cameraRotation: Vector3;
-    private _cameraTranslation: Vector3;
+    private _cameraRotation: vec3;
+    private _cameraTranslation: vec3;
     objectList: Map<string, Primitive> = new Map<string, Primitive>([]);
     ambiantLight: ambiantLight = [.2, .2, .2];
     /**
@@ -383,7 +423,7 @@ class World {
     ];
     // to fix lightning not rotating with the camera
     viewRotationMatrix: mat4 = mat4.create();
-    constructor(fov: number, zNear: number, zFar: number, gl: WebGLRenderingContext, cameraRotation: Vector3, cameraTranslation: Vector3, ambiantLight?: ambiantLight, directionalLights: dirrectionalLight[] = [], pointLights: PointLight[] = []) {
+    constructor(fov: number, zNear: number, zFar: number, gl: WebGLRenderingContext, cameraRotation: vec3, cameraTranslation: vec3, ambiantLight?: ambiantLight, directionalLights: dirrectionalLight[] = [], pointLights: PointLight[] = []) {
         this._fov = fov;
         this._zNear = zNear;
         this._zFar = zFar;
@@ -404,15 +444,18 @@ class World {
         return this;
     }
     updateValues() {
+        //! vec3.inverse turn a [0 , 0, 0] vector to [Infinity, Infinity, Infinity]
+        const reverseCTrans = vec3.mul(vec3.create(), this.cameraTranslation, [-1, -1, -1]);
+        const reverseCRot = vec3.mul(vec3.create(), this.cameraRotation, [-1, -1, -1]);
         mat4.perspective(this.projectionMatrix, this.fov, this.aspect, this.zNear, this.zFar);
-        this.viewMatrix = mat4.create();
         this.viewRotationMatrix = mat4.create();
+        this.viewMatrix = mat4.create();
         mat4.identity(this.viewRotationMatrix);
-        mat4.rotateX(this.viewRotationMatrix, this.viewRotationMatrix, this.cameraRotation.multiply(-1).x);
-        mat4.rotateY(this.viewRotationMatrix, this.viewRotationMatrix, this.cameraRotation.multiply(-1).y);
-        mat4.rotateZ(this.viewRotationMatrix, this.viewRotationMatrix, this.cameraRotation.multiply(-1).z);
+        mat4.rotateX(this.viewRotationMatrix, this.viewRotationMatrix, reverseCRot[0]);
+        mat4.rotateY(this.viewRotationMatrix, this.viewRotationMatrix, reverseCRot[1]);
+        mat4.rotateZ(this.viewRotationMatrix, this.viewRotationMatrix, reverseCRot[2]);
         mat4.identity(this.viewMatrix);
-        mat4.translate(this.viewMatrix, this.viewMatrix, this.cameraTranslation.multiply(-1).toArray());
+        mat4.translate(this.viewMatrix, this.viewMatrix, reverseCTrans);
         mat4.multiply(this.viewMatrix, this.viewRotationMatrix, this.viewMatrix);
         this.objectList.forEach(v => {
             v.updateMatricies(true);
@@ -452,14 +495,14 @@ class World {
     get aspect() {
         return this._aspect;
     }
-    set cameraRotation(value: Vector3) {
+    set cameraRotation(value: vec3) {
         this._cameraRotation = value;
         this.updateValues();
     }
     get cameraRotation() {
         return this._cameraRotation;
     }
-    set cameraTranslation(value: Vector3) {
+    set cameraTranslation(value: vec3) {
         this._cameraTranslation = value;
         this.updateValues();
     }
@@ -476,44 +519,44 @@ class World {
 }
 
 class Cube extends Primitive {
-    constructor(world: World, vertexShaderUrl: string, fragmentShaderUrl: string, texture: WebGLTexture, reflectivity: number, translation: Vector3 = Vector3.null, scale: Vector3 = new Vector3(1, 1, 1), rotation: Vector3 = Vector3.null) {
+    constructor(world: World, vertexShaderUrl: string, fragmentShaderUrl: string, texture: WebGLTexture, reflectivity: number, translation: vec3 = [0, 0, 0], scale: vec3 = [1, 1, 1], rotation: vec3 = [0, 0, 0]) {
         super(
             [
                 // Face avant
-                new Vector3(-1.0, -1.0, 1.0),
-                new Vector3(1.0, -1.0, 1.0),
-                new Vector3(1.0, 1.0, 1.0),
-                new Vector3(-1.0, 1.0, 1.0),
+                vec3.fromValues(-1.0, -1.0, 1.0),
+                vec3.fromValues(1.0, -1.0, 1.0),
+                vec3.fromValues(1.0, 1.0, 1.0),
+                vec3.fromValues(-1.0, 1.0, 1.0),
 
                 // Face arrière
-                new Vector3(-1.0, -1.0, -1.0),
-                new Vector3(-1.0, 1.0, -1.0),
-                new Vector3(1.0, 1.0, -1.0),
-                new Vector3(1.0, -1.0, -1.0),
+                vec3.fromValues(-1.0, -1.0, -1.0),
+                vec3.fromValues(-1.0, 1.0, -1.0),
+                vec3.fromValues(1.0, 1.0, -1.0),
+                vec3.fromValues(1.0, -1.0, -1.0),
 
                 // Face supérieure
-                new Vector3(-1.0, 1.0, -1.0),
-                new Vector3(-1.0, 1.0, 1.0),
-                new Vector3(1.0, 1.0, 1.0),
-                new Vector3(1.0, 1.0, -1.0),
+                vec3.fromValues(-1.0, 1.0, -1.0),
+                vec3.fromValues(-1.0, 1.0, 1.0),
+                vec3.fromValues(1.0, 1.0, 1.0),
+                vec3.fromValues(1.0, 1.0, -1.0),
 
                 // Face inférieure
-                new Vector3(-1.0, -1.0, -1.0),
-                new Vector3(1.0, -1.0, -1.0),
-                new Vector3(1.0, -1.0, 1.0),
-                new Vector3(-1.0, -1.0, 1.0),
+                vec3.fromValues(-1.0, -1.0, -1.0),
+                vec3.fromValues(1.0, -1.0, -1.0),
+                vec3.fromValues(1.0, -1.0, 1.0),
+                vec3.fromValues(-1.0, -1.0, 1.0),
 
                 // Face droite
-                new Vector3(1.0, -1.0, -1.0),
-                new Vector3(1.0, 1.0, -1.0),
-                new Vector3(1.0, 1.0, 1.0),
-                new Vector3(1.0, -1.0, 1.0),
+                vec3.fromValues(1.0, -1.0, -1.0),
+                vec3.fromValues(1.0, 1.0, -1.0),
+                vec3.fromValues(1.0, 1.0, 1.0),
+                vec3.fromValues(1.0, -1.0, 1.0),
 
                 // Face gauche
-                new Vector3(-1.0, -1.0, -1.0),
-                new Vector3(-1.0, -1.0, 1.0),
-                new Vector3(-1.0, 1.0, 1.0),
-                new Vector3(-1.0, 1.0, -1.0)
+                vec3.fromValues(-1.0, -1.0, -1.0),
+                vec3.fromValues(-1.0, -1.0, 1.0),
+                vec3.fromValues(-1.0, 1.0, 1.0),
+                vec3.fromValues(-1.0, 1.0, -1.0)
             ],
             [
                 [0, 1, 2], [0, 2, 3],
@@ -525,40 +568,40 @@ class Cube extends Primitive {
             ],
             [
                 // Front
-                new Vector3(0.0, 0.0, 1.0),
-                new Vector3(0.0, 0.0, 1.0),
-                new Vector3(0.0, 0.0, 1.0),
-                new Vector3(0.0, 0.0, 1.0),
+                vec3.fromValues(0.0, 0.0, 1.0),
+                vec3.fromValues(0.0, 0.0, 1.0),
+                vec3.fromValues(0.0, 0.0, 1.0),
+                vec3.fromValues(0.0, 0.0, 1.0),
 
                 // Back
-                new Vector3(0.0, 0.0, -1.0),
-                new Vector3(0.0, 0.0, -1.0),
-                new Vector3(0.0, 0.0, -1.0),
-                new Vector3(0.0, 0.0, -1.0),
+                vec3.fromValues(0.0, 0.0, -1.0),
+                vec3.fromValues(0.0, 0.0, -1.0),
+                vec3.fromValues(0.0, 0.0, -1.0),
+                vec3.fromValues(0.0, 0.0, -1.0),
 
                 // Top
-                new Vector3(0.0, 1.0, 0.0),
-                new Vector3(0.0, 1.0, 0.0),
-                new Vector3(0.0, 1.0, 0.0),
-                new Vector3(0.0, 1.0, 0.0),
+                vec3.fromValues(0.0, 1.0, 0.0),
+                vec3.fromValues(0.0, 1.0, 0.0),
+                vec3.fromValues(0.0, 1.0, 0.0),
+                vec3.fromValues(0.0, 1.0, 0.0),
 
                 // Bottom
-                new Vector3(0.0, -1.0, 0.0),
-                new Vector3(0.0, -1.0, 0.0),
-                new Vector3(0.0, -1.0, 0.0),
-                new Vector3(0.0, -1.0, 0.0),
+                vec3.fromValues(0.0, -1.0, 0.0),
+                vec3.fromValues(0.0, -1.0, 0.0),
+                vec3.fromValues(0.0, -1.0, 0.0),
+                vec3.fromValues(0.0, -1.0, 0.0),
 
                 // Right
-                new Vector3(1.0, 0.0, 0.0),
-                new Vector3(1.0, 0.0, 0.0),
-                new Vector3(1.0, 0.0, 0.0),
-                new Vector3(1.0, 0.0, 0.0),
+                vec3.fromValues(1.0, 0.0, 0.0),
+                vec3.fromValues(1.0, 0.0, 0.0),
+                vec3.fromValues(1.0, 0.0, 0.0),
+                vec3.fromValues(1.0, 0.0, 0.0),
 
                 // Left
-                new Vector3(-1.0, 0.0, 0.0),
-                new Vector3(-1.0, 0.0, 0.0),
-                new Vector3(-1.0, 0.0, 0.0),
-                new Vector3(-1.0, 0.0, 0.0),
+                vec3.fromValues(-1.0, 0.0, 0.0),
+                vec3.fromValues(-1.0, 0.0, 0.0),
+                vec3.fromValues(-1.0, 0.0, 0.0),
+                vec3.fromValues(-1.0, 0.0, 0.0),
             ],
             world,
             vertexShaderUrl,
@@ -604,22 +647,22 @@ class Cube extends Primitive {
 }
 
 class Plane extends Primitive {
-    constructor(world: World, vertexShaderUrl: string, fragmentShaderUrl: string, texture: WebGLTexture, reflectivity: number, translation: Vector3 = Vector3.null, scale: Vector3 = new Vector3(1, 1, 1), rotation: Vector3 = Vector3.null) {
+    constructor(world: World, vertexShaderUrl: string, fragmentShaderUrl: string, texture: WebGLTexture, reflectivity: number, translation: vec3 = [0, 0, 0], scale: vec3 = [1, 1, 1], rotation: vec3 = [0, 0, 0]) {
         super(
             [
-                new Vector3(-1.0, 1.0, -1.0),
-                new Vector3(-1.0, 1.0, 1.0),
-                new Vector3(1.0, 1.0, 1.0),
-                new Vector3(1.0, 1.0, -1.0),
+                vec3.fromValues(-1.0, 1.0, -1.0),
+                vec3.fromValues(-1.0, 1.0, 1.0),
+                vec3.fromValues(1.0, 1.0, 1.0),
+                vec3.fromValues(1.0, 1.0, -1.0),
             ],
             [
                 [0, 1, 2], [0, 2, 3]
             ],
             [
-                new Vector3(0.0, 1.0, 0.0),
-                new Vector3(0.0, 1.0, 0.0),
-                new Vector3(0.0, 1.0, 0.0),
-                new Vector3(0.0, 1.0, 0.0),
+                vec3.fromValues(0.0, 1.0, 0.0),
+                vec3.fromValues(0.0, 1.0, 0.0),
+                vec3.fromValues(0.0, 1.0, 0.0),
+                vec3.fromValues(0.0, 1.0, 0.0),
             ],
             world,
             vertexShaderUrl,
@@ -696,15 +739,170 @@ class UIPlane extends Plane {
     }
 }
 
+class Icosahedron extends Primitive {
+    // just to avoid computing it everytime
+    private static phi = (1 + Math.sqrt(5)) / 2;
+    constructor(world: World, vertexShaderUrl: string, fragmentShaderUrl: string, texture: WebGLTexture, reflectivity: number, translation: vec3 = [0, 0, 0], scale: vec3 = [1, 1, 1], rotation: vec3 = [0, 0, 0]) {
+        const l = Icosahedron.phi;
+        const h = 1;
+        const t: [number, number][] = [];
+        for (let i of new Array(20)) {
+            t.push([0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 1]);
+        }
+        super(
+            [
+                // PAIN AND SUFFERING,
+                // LOTS OF IT
+                //
+                // [-h, l, 0],  0
+                // [h, l, 0],   1
+                // [-h, -l, 0], 2
+                // [h, -l, 0],  3
+
+                // [0, -h, l],  4
+                // [0, h, l],   5
+                // [0, -h, -l], 6
+                // [0, h, -l],  7
+
+                // [l, 0, -h],  8
+                // [l, 0, h],   9
+                // [-l, 0, -h], 10
+                // [-l, 0, h],  11
+
+                // f0: 0 2 5
+                [-h, l, 0], // 0
+                [h, l, 0],  // 1
+                [0, h, l],  // 2
+                // f1: 0 5 11
+                [-h, l, 0], // 3
+                [0, h, l],  // 4
+                [-l, 0, h], // 5
+                // f2: 0 11 10
+                [-h, l, 0], // 6
+                [-l, 0, h], // 7 
+                [-l, 0, -h],// 8
+                // f3: 0 10 7 
+                [-h, l, 0], // 9
+                [-l, 0, -h],// 10
+                [0, h, -l], // 11
+                // f4: 0 7 1
+                [-h, l, 0], // 12
+                [0, h, -l], // 13
+                [h, l, 0],  // 14
+                // f5: 1 9 5
+                [h, l, 0],  // 15
+                [l, 0, h],  // 16
+                [0, h, l],  // 17
+                // f6: 5 9 4
+                [0, h, l],  // 18
+                [l, 0, h],  // 19
+                [0, -h, l], // 20
+                // f7: 5 4 11
+                [0, h, l],  // 21
+                [0, -h, l], // 22
+                [-l, 0, h], // 23
+                // f8: 11 4 2
+                [-l, 0, h], // 24
+                [0, -h, l], // 25
+                [-h, -l, 0],// 26
+                // f9: 11 2 10
+                [-l, 0, h], // 27
+                [-h, -l, 0],// 28
+                [-l, 0, -h],// 29
+                // f10: 10 2 6
+                [-l, 0, -h],// 30
+                [-h, -l, 0],// 31
+                [0, -h, -l],// 32
+                // f11: 10 6 7
+                [-l, 0, -h],// 33
+                [0, -h, -l],// 34
+                [0, h, -l], // 35
+                // f12: 7 6 8
+                [0, h, -l], // 36
+                [0, -h, -l],// 37
+                [l, 0, -h], // 38
+                // f13: 7 8 1
+                [0, h, -l], // 39
+                [l, 0, -h], // 40
+                [h, l, 0],  // 41
+                // f14: 1 8 9
+                [h, l, 0],  // 42
+                [l, 0, -h], // 43
+                [l, 0, h],  // 44
+                // f15: 3 4 9
+                [h, -l, 0], // 45
+                [0, -h, l], // 46
+                [l, 0, h],  // 47
+                // f16: 3 2 4
+                [h, -l, 0], // 48
+                [-h, -l, 0],// 49
+                [0, -h, l], // 50
+                // f17: 3 6 2
+                [h, -l, 0], // 51
+                [0, -h, -l],// 52
+                [-h, -l, 0],// 53
+                // f18: 3 8 6
+                [h, -l, 0], // 54
+                [l, 0, -h], // 55
+                [0, -h, -l],// 56
+                // f19: 3 9 8
+                [h, -l, 0], // 57
+                [l, 0, h],  // 58
+                [l, 0, -h], // 59
+                // 60 total verticies
+            ],
+            [
+                [0, 1, 2],
+                [3, 4, 5],
+                [6, 7, 8],
+                [9, 10, 11],
+                [12, 13, 14],
+                [15, 16, 17],
+                [18, 19, 20],
+                [21, 22, 23],
+                [24, 25, 26],
+                [27, 28, 29],
+                [30, 31, 32],
+                [33, 34, 35],
+                [36, 37, 38],
+                [39, 40, 41],
+                [42, 43, 44],
+                [45, 46, 47],
+                [48, 49, 50],
+                [51, 52, 53],
+                [54, 55, 56],
+                [57, 58, 59]
+            ],
+            null,
+            world,
+            vertexShaderUrl,
+            fragmentShaderUrl,
+            t,
+            texture,
+            reflectivity,
+            translation,
+            scale,
+            rotation
+        );
+    }
+}
+
+class PhysicCube extends Cube {
+
+}
+
 type ambiantLight = N3;
 
 interface dirrectionalLight {
-    dirrection: Vector3,
+    dirrection: vec3,
     color: N3
 }
 
 interface PointLight {
-    position: Vector3,
+    position: vec3,
     color: N3
 }
 
@@ -714,5 +912,6 @@ export default {
     Primitive: Primitive,
     Cube: Cube,
     Plane: Plane,
-    UIPlane: UIPlane
+    UIPlane: UIPlane,
+    Icosahedron: Icosahedron
 }
