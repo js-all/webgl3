@@ -133,15 +133,15 @@ function createTextureFromCanvas(gl: WebGLRenderingContext, canvas: HTMLCanvasEl
     return texture;
 }
 
-export default {
-    createBuffer: createBuffer,
-    isPowerOf2: isPowerOf2,
-    loadShader: loadShader,
-    loadTexture: loadTexture,
-    initShaderProgram: initShaderProgram,
-    createTextureFromColor: createTextureFromColor,
-    rad: rad,
-    fetchShaders: fetchShaders,
-    createTextureFromCanvas: createTextureFromCanvas,
-    deg: deg
+export {
+    createBuffer,
+    isPowerOf2,
+    loadShader,
+    loadTexture,
+    initShaderProgram,
+    createTextureFromColor,
+    rad,
+    fetchShaders,
+    createTextureFromCanvas,
+    deg
 }

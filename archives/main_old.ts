@@ -1,5 +1,5 @@
 import { mat4 } from 'gl-matrix'
-import rh from './resize'
+import rh from '../resize'
 
 const timeaverage: number[] = [];
 

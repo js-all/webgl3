@@ -1,13 +1,6 @@
 import { mat4, vec4, vec3 } from 'gl-matrix'
 import { v4 as uuidV4 } from 'uuid';
-import utils from './utils'
-// i don't know why i can't do import { createBuffer, ...} from './utils' so ill do it this way
-const {
-    createBuffer,
-    initShaderProgram,
-    fetchShaders,
-    rad
-} = utils;
+import { createBuffer, initShaderProgram, fetchShaders, rad } from './utils'
 
 type N3 = [number, number, number];
 
@@ -97,6 +90,16 @@ class Primitive {
     attributesLocations: number[] = [];
     uniformsLocations: WebGLUniformLocation[] = [];
     bufferData: BufferData;
+    /**
+     * so for some reason when "computing" the points (applying
+     * model view and projection matrix) on the cpu side, the x
+     * and z rotations axis needs to be inverted, otherwise the
+     * verticies becomes wrong.
+     * 
+     * so i created this property to cache the matrix and avoid
+     * recomputing when its not needed.
+     */
+    modelMatrixRotationFix: mat4 = mat4.create();
     modelMatrix: mat4 = mat4.create();
     modelViewMatrix: mat4 = mat4.create();
     directionalLights: dirrectionalLight[] = [];
@@ -198,10 +201,15 @@ class Primitive {
         this.modelMatrix = mat4.create();
         mat4.identity(this.modelMatrix);
         mat4.translate(this.modelMatrix, this.modelMatrix, this.translation);
+        this.modelMatrixRotationFix = mat4.clone(this.modelMatrix);
         mat4.rotate(this.modelMatrix, this.modelMatrix, this.rotation[0], [1, 0, 0]);
         mat4.rotate(this.modelMatrix, this.modelMatrix, this.rotation[1], [0, 1, 0]);
         mat4.rotate(this.modelMatrix, this.modelMatrix, this.rotation[2], [0, 0, 1]);
         mat4.scale(this.modelMatrix, this.modelMatrix, this.scale);
+        mat4.rotate(this.modelMatrixRotationFix, this.modelMatrixRotationFix, this.rotation[0], [-1, 0, 0]); // inverted X
+        mat4.rotate(this.modelMatrixRotationFix, this.modelMatrixRotationFix, this.rotation[1], [0, -1, 0]);
+        mat4.rotate(this.modelMatrixRotationFix, this.modelMatrixRotationFix, this.rotation[2], [0, 0, -1]); // and Z
+        mat4.scale(this.modelMatrixRotationFix, this.modelMatrixRotationFix, this.scale);
         this.modelViewMatrix = mat4.create();
         mat4.multiply(this.modelViewMatrix, this.world.viewMatrix, this.modelMatrix);
         if (worldCall) {
@@ -223,20 +231,17 @@ class Primitive {
     /**
      * get the 2d bonding box of the element
      * i would have liked to to it in a shader to avoid computing matricies multiplication on the cpu that much
-     * but i don't want to use more than two passes so i'll do it this way
+     * but i don't want to use more than one passes so i'll do it this way
      */
     get2dScreenBoundingBox() {
         const transformedVerticiesX: number[] = [];
         const transformedVerticiesY: number[] = [];
         for (let v of this.points) {
-            const vec = vec4.fromValues(v[0], v[1], v[2], 1);
-            vec4.transformMat4(vec, vec, this.modelViewMatrix);
-            vec4.transformMat4(vec, vec, this.world.projectionMatrix);
-            // if w is less than 0 the object is off screen
-            if (vec[3] <= 0) continue;
-            const dVec = vec.map((v: number) => v / vec[3]);
-            transformedVerticiesX.push(dVec[0]);
-            transformedVerticiesY.push(dVec[1]);
+            const proj = this.computeProjectedPosition(v);
+            // if w <= 0 the its offscreen
+            if (proj[3] <= 0) continue;
+            transformedVerticiesX.push(proj[0]);
+            transformedVerticiesY.push(proj[1]);
         }
         if (transformedVerticiesX.length > 0 && transformedVerticiesY.length > 0) {
             const minX = Math.min(...transformedVerticiesX);
@@ -257,6 +262,16 @@ class Primitive {
                 dy: 0
             }
         }
+    }
+    computeProjectedPosition(vertex: vec3) {
+        const vec = vec4.fromValues(vertex[0], vertex[1], vertex[2], 1);
+        vec4.transformMat4(vec, vec, this.modelMatrixRotationFix);
+        vec4.transformMat4(vec, vec, this.world.viewMatrix);
+        vec4.transformMat4(vec, vec, this.world.projectionMatrix);
+        const w = vec[3];
+        const dVec = vec.map((v: number) => v / w);
+        dVec[3] = w;
+        return <vec4>dVec
     }
     get3dBoundingBox() {
         const Ys: number[] = [];
@@ -427,7 +442,7 @@ class World {
     pointLights: PointLight[] = [];
     preRenderInstructions: ((gl: WebGLRenderingContext) => any)[] = [
         gl => {
-            gl.clearColor(0, 0, 0, 1);
+            gl.clearColor(255, 255, 255, 1);
             gl.clearDepth(1);
             gl.enable(gl.DEPTH_TEST);
             gl.depthFunc(gl.LEQUAL);
@@ -761,7 +776,7 @@ class UIPlane extends Plane {
 class Icosphere extends Primitive {
     // just to avoid computing it everytime
     private static phi = (1 + Math.sqrt(5)) / 2;
-    constructor(world: World, vertexShaderUrl: string, fragmentShaderUrl: string, refinement: number, texture: WebGLTexture, reflectivity: number, translation: vec3 = [0, 0, 0], scale: vec3 = [1, 1, 1], rotation: vec3 = [0, 0, 0]) {
+    constructor(world: World, dupeVert: boolean, vertexShaderUrl: string, fragmentShaderUrl: string, refinement: number, texture: WebGLTexture, reflectivity: number, translation: vec3 = [0, 0, 0], scale: vec3 = [1, 1, 1], rotation: vec3 = [0, 0, 0]) {
         const h = 1;
         const l = Icosphere.phi * h;
         const t: [number, number][] = [];
@@ -880,12 +895,14 @@ function normalizePackedTriVecArray(arr: [vec3, vec3, vec3][]) {
     }
     return res;
 }
+type g = Primitive;
+export {
+    World,
+    Primitive,
+    Cube,
+    Plane,
+    UIPlane,
+    Icosphere,
+    unpackTriVecArray
 
-export default {
-    World: World,
-    Primitive: Primitive,
-    Cube: Cube,
-    Plane: Plane,
-    UIPlane: UIPlane,
-    Icosphere: Icosphere
 }

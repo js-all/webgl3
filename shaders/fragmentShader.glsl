@@ -47,5 +47,5 @@ void main() {
   }
   highp vec3 light = (uAmbiantLight * vec3(uLightFac.x)) + (dDiffuse * vec3(uLightFac.y)) + (pDiffuse * vec3(uLightFac.z)) + (pSpecular * vec3(uLightFac.w));
   gl_FragColor = vec4(texelColor.rgb * (light), texelColor.a);
-  gl_FragColor = vec4(vec3(dot(normal, normalize(-vFragPos))), 1) ;
+  //gl_FragColor = vec4(vec3(dot(normal, normalize(-vFragPos))), 1) ;
 }

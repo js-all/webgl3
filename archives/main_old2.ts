@@ -1,7 +1,7 @@
 import { vec4, vec3 } from 'gl-matrix'
-import rh from './resize'
-import utils from './utils'
-import classes from './class'
+import rh from '../resize'
+import utils from '../utils'
+import classes from '../class'
 const { createTextureFromColor, rad, deg, loadTexture, createTextureFromCanvas } = utils;
 const { Primitive, World, Cube, Plane, UIPlane } = classes
 
@@ -185,7 +185,7 @@ function draw() {
     const tt = performance.now() - t;
     updateFpsCanvas(Math.floor(1000 / tt));
     {
-        const { x, y, dx, dy } = cube1.getBoundingBox();
+        const { x, y, dx, dy } = cube1.get2dScreenBoundingBox();
         // if the object is offscreen
         if (x === 0 && y === 0 && dx === 0 && y === 0) {
             [bondingBoxTest.x, bondingBoxTest.y, bondingBoxTest.dx, bondingBoxTest.dy] = [0, 0, 0, 0];
