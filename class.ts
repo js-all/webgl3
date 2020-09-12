@@ -3,8 +3,10 @@ import { v4 as uuidV4 } from 'uuid';
 import { createBuffer, initShaderProgram, fetchShaders, rad } from './utils'
 
 type N3 = [number, number, number];
-interface mesh {
-
+interface Mesh {
+    points: vec3[],
+    tris: N3[],
+    normals: vec3[]
 }
 
 const MAXLIGHT = 32;
@@ -229,6 +231,20 @@ class Primitive {
     get gl() {
         return this.world.gl;
     }
+    static generateMergedVerticiesMesh(mesh: Mesh) {
+        const { normals, points, tris } = mesh;
+        for(let i = 0; i < points.length; i++) {
+            const p = points[i];
+            const concernedTris: number[] = [];
+            for(let j = 0; j < tris.length;j++) {
+                const t = tris[j];
+                const test = t[0] === i || t[1] === i || t[2] === i;
+                if (test) {
+                    concernedTris.push(j);
+                }
+            }
+        }
+    }
     /**
      * get the 2d bonding box of the element
      * i would have liked to to it in a shader to avoid computing matricies multiplication on the cpu that much
@@ -264,6 +280,7 @@ class Primitive {
             }
         }
     }
+    
     computeProjectedPosition(vertex: vec3) {
         const vec = vec4.fromValues(vertex[0], vertex[1], vertex[2], 1);
         vec4.transformMat4(vec, vec, this.modelMatrixRotationFix);
@@ -854,10 +871,6 @@ class Icosphere extends Primitive {
             rotation
         );
     }
-}
-
-class PhysicCube extends Cube {
-
 }
 
 type ambiantLight = N3;

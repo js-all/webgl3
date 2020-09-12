@@ -5,11 +5,11 @@ import rh from './resize'
 
 const { rad, deg } = utils;
 const canvas = <HTMLCanvasElement>document.createElement('canvas');
-const cw: number = 1000;
-const ch: number = 1000;
+const cw: number = 500;
+const ch: number = 500;
 canvas.height = ch;
 canvas.width = cw;
-const gl = <WebGLRenderingContext>canvas.getContext('webgl');
+const gl = <WebGLRenderingContext>canvas.getContext('webgl', {antialias: false});
 
 const mousePos = {
     x: cw / 2,
@@ -35,6 +35,7 @@ const world = new H3D.World(rad(45), .1, 100, gl, [rad(-180), rad(-180), 0], [0,
     color: <[number, number, number]>[0, 0, 0].fill(.5),
     position: [5, -5, -2]
 }]);
+
 //const c = new H3D.Cube(world, shaders.vert, shaders.frag, utils.createTextureFromColor(gl, [0, 255, 0, 255]), .5, [1, 0, 4])
 const ico = new H3D.Icosphere(world, false, shaders.vert, shaders.frag, 2, utils.createTextureFromColor(gl, [255, 50, 50, 255]), .5, [0, 0, -3], [.5, .5, .5]);
 const canvasOverlay = new H3D.UIPlane(0, 0, cw, ch, utils.createTextureFromCanvas(gl, canvas2d), world, UIShaders.vert, UIShaders.frag);
