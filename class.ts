@@ -233,17 +233,24 @@ class Primitive {
     }
     static generateMergedVerticiesMesh(mesh: Mesh) {
         const { normals, points, tris } = mesh;
+        const dupedPoints: Map<vec3, number[]> = new Map();
         for(let i = 0; i < points.length; i++) {
             const p = points[i];
-            const concernedTris: number[] = [];
-            for(let j = 0; j < tris.length;j++) {
-                const t = tris[j];
-                const test = t[0] === i || t[1] === i || t[2] === i;
-                if (test) {
-                    concernedTris.push(j);
-                }
+            if (!dupedPoints.has(p)) {
+                dupedPoints.set(p, [i]);
+            } else {
+                dupedPoints.set(p, <number[]>dupedPoints.get(p));
             }
         }
+        dupedPoints.forEach((v, k) => {
+            const normals: vec3[] = [];
+            const tris: number[] = [];
+            for(let)
+            for(let ti = 0; ti < tris.length; ti++) {
+                const t = tris[ti];
+                if (t[0] === )
+            }
+        });
     }
     /**
      * get the 2d bonding box of the element
