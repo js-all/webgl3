@@ -3,6 +3,9 @@ import { v4 as uuidV4 } from 'uuid';
 import { createBuffer, initShaderProgram, fetchShaders, rad } from './utils'
 
 type N3 = [number, number, number];
+interface mesh {
+
+}
 
 const MAXLIGHT = 32;
 
@@ -50,11 +53,6 @@ enum UniformTypes {
     "uniformMatrix4fv"
 }
 
-// TODO
-/**
- * refector entire thing to use non duplicated verticies and cumpute duped one at init buffer or something
- */
-
 class Primitive {
     static MAX_LIGHTS = 64;
     points: vec3[];
@@ -98,6 +96,9 @@ class Primitive {
      * 
      * so i created this property to cache the matrix and avoid
      * recomputing when its not needed.
+     */
+    /**
+     * nvm im dumb i think, im not sure but its proably caused by the canvas overlay that has x and y flipped
      */
     modelMatrixRotationFix: mat4 = mat4.create();
     modelMatrix: mat4 = mat4.create();
@@ -207,7 +208,7 @@ class Primitive {
         mat4.rotate(this.modelMatrix, this.modelMatrix, this.rotation[2], [0, 0, 1]);
         mat4.scale(this.modelMatrix, this.modelMatrix, this.scale);
         mat4.rotate(this.modelMatrixRotationFix, this.modelMatrixRotationFix, this.rotation[0], [-1, 0, 0]); // inverted X
-        mat4.rotate(this.modelMatrixRotationFix, this.modelMatrixRotationFix, this.rotation[1], [0, -1, 0]);
+        mat4.rotate(this.modelMatrixRotationFix, this.modelMatrixRotationFix, this.rotation[1], [0, 1, 0]);  // ok there im confused, on a project you need the y inverted and on the other you don't so fuck it
         mat4.rotate(this.modelMatrixRotationFix, this.modelMatrixRotationFix, this.rotation[2], [0, 0, -1]); // and Z
         mat4.scale(this.modelMatrixRotationFix, this.modelMatrixRotationFix, this.scale);
         this.modelViewMatrix = mat4.create();

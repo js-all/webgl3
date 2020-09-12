@@ -193,6 +193,7 @@ function loopTroughNeigbours(map: map<boolean>, x: number, y: number, z: number,
     }
     return 0;
 }
+
 updateMesh();
 {
     const code = parseInt(prompt("yea yk") ?? '0', 2);

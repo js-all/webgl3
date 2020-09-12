@@ -36,7 +36,7 @@ const world = new H3D.World(rad(45), .1, 100, gl, [rad(-180), rad(-180), 0], [0,
     position: [5, -5, -2]
 }]);
 //const c = new H3D.Cube(world, shaders.vert, shaders.frag, utils.createTextureFromColor(gl, [0, 255, 0, 255]), .5, [1, 0, 4])
-const ico = new H3D.Icosphere(world, false, shaders.vert, shaders.frag, 1, utils.createTextureFromColor(gl, [255, 50, 50, 255]), .5, [0, 0, -3], [.5, .5, .5]);
+const ico = new H3D.Icosphere(world, false, shaders.vert, shaders.frag, 2, utils.createTextureFromColor(gl, [255, 50, 50, 255]), .5, [0, 0, -3], [.5, .5, .5]);
 const canvasOverlay = new H3D.UIPlane(0, 0, cw, ch, utils.createTextureFromCanvas(gl, canvas2d), world, UIShaders.vert, UIShaders.frag);
 //const crosshair = new H3D.UIPlane(cw / 2 - 10, ch / 2 - 10, cw / 2 + 10, ch / 2 + 10, utils.loadTexture(gl, '/img/cursor.png'), world, "/shaders/UIVertexShader.glsl", '/shaders/UIFragmentShader.glsl');
 //const test = new H3D.UIPlane(0, 0, 100, 100, utils.createTextureFromColor(gl, [255, 255, 255, 255]), world, UIShaders.vert, UIShaders.frag);
@@ -55,7 +55,7 @@ function draw() {
     vec3.transformMat4(pos, pos, mat4.invert(mat4.create(), world.viewMatrix));
     //world.pointLights[0].position = pos;*/
     world.updateValues();
-    udpateOverlayCanvas();
+    //udpateOverlayCanvas();
     world.render();
     i++;
     requestAnimationFrame(draw);
