@@ -193,7 +193,7 @@ function loopTroughNeigbours(map: map<boolean>, x: number, y: number, z: number,
     }
     return 0;
 }
-//updateMesh();
+updateMesh();
 {
     const code = parseInt(prompt("yea yk") ?? '0', 2);
     const resTris = <[vec3, vec3, vec3][]>(<[[number, number], [number, number], [number, number]][]>triangulation.triangles[isNaN(code) ? 0 : code].map(t => t.map(ei => triangulation.edges[ei]))).map(t2 => t2.map(v => {

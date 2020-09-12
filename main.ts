@@ -1,8 +1,7 @@
-import rh from './resize'
-import utils from './utils'
-import H3D from './class'
+import * as utils from './utils'
+import * as H3D from './class'
 import { vec3, vec4, mat4 } from 'gl-matrix'
-
+import rh from './resize'
 
 const { rad, deg } = utils;
 const canvas = <HTMLCanvasElement>document.createElement('canvas');
