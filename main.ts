@@ -5,11 +5,11 @@ import rh from './resize'
 
 const { rad, deg } = utils;
 const canvas = <HTMLCanvasElement>document.createElement('canvas');
-const cw: number = 500;
-const ch: number = 500;
+const cw: number = 1000;
+const ch: number = 1000;
 canvas.height = ch;
 canvas.width = cw;
-const gl = <WebGLRenderingContext>canvas.getContext('webgl', {antialias: false});
+const gl = <WebGLRenderingContext>canvas.getContext('webgl', { antialias: false });
 
 const mousePos = {
     x: cw / 2,
@@ -37,7 +37,7 @@ const world = new H3D.World(rad(45), .1, 100, gl, [rad(-180), rad(-180), 0], [0,
 }]);
 
 //const c = new H3D.Cube(world, shaders.vert, shaders.frag, utils.createTextureFromColor(gl, [0, 255, 0, 255]), .5, [1, 0, 4])
-const ico = new H3D.Icosphere(world, false, shaders.vert, shaders.frag, 1, utils.createTextureFromColor(gl, [255, 50, 50, 255]), .5, [0, 0, -3], [.5, .5, .5]);
+const ico = new H3D.Icosphere(world, false, shaders.vert, shaders.frag, 0, utils.createTextureFromColor(gl, [255, 50, 50, 255]), .5, [0, 0, -3], [.5, .5, .5]);
 const canvasOverlay = new H3D.UIPlane(0, 0, cw, ch, utils.createTextureFromCanvas(gl, canvas2d), world, UIShaders.vert, UIShaders.frag);
 //const crosshair = new H3D.UIPlane(cw / 2 - 10, ch / 2 - 10, cw / 2 + 10, ch / 2 + 10, utils.loadTexture(gl, '/img/cursor.png'), world, "/shaders/UIVertexShader.glsl", '/shaders/UIFragmentShader.glsl');
 //const test = new H3D.UIPlane(0, 0, 100, 100, utils.createTextureFromColor(gl, [255, 255, 255, 255]), world, UIShaders.vert, UIShaders.frag);
@@ -69,38 +69,60 @@ function udpateOverlayCanvas() {
     ctx.strokeStyle = "blue";
     ctx.lineWidth = .5;
     ctx.fillStyle = "red";
-    for (let o of objs) {
-        for (let i = 0; i < o.points.length; i++) {
-            const l = .2;
-            const p1 = o.points[i];
-            const p2 = vec3.add(vec3.create(), p1, vec3.mul(vec3.create(), vec3.normalize(vec3.create(), o.normals[i]), [l, l, l]));
-            const convX = (n: number) => (n + 1) * (cw / 2);
-            const convY = (n: number) => (n + 1) * (ch / 2);
-            const r1 = o.computeProjectedPosition(p1);
-            const r2 = o.computeProjectedPosition(p2);
-            if (r1[3] > 3.1) continue;
-            ctx.lineWidth = 10 / (r1[3] * 2);
-            ctx.beginPath();
-            ctx.moveTo(convX(r1[0]), convY(r1[1]));
-            ctx.lineTo(convX(r2[0]), convY(r2[1]));
-            ctx.stroke();
-            ctx.closePath();
-            ctx.fillStyle = "red";
-            ctx.beginPath();
-            ctx.arc(convX(r1[0]), convY(r1[1]), 2, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.closePath();
-            ctx.fillStyle = "green";
-            ctx.beginPath();
-            ctx.arc(convX(r2[0]), convY(r2[1]), 2, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.closePath();
-            ctx.fillStyle = "orange";
-            ctx.font = "Arial 50px";
-            ctx.textBaseline = "middle";
-            ctx.textAlign = "center";
-            ctx.fillText((Math.floor(r1[3] * 10) / 10) + "", convX(r1[0]), convY(r1[1]) + 10);
+    const data = H3D.Primitive.tmpDebugList;
+    const points: vec3[] = [];
+    const normals: vec3[] = [];
+    const colors: string[] = [];
+    if (false) {
+        for (let i of data) {
+            for (let j of i.oldNormals) {
+                points.push(i.pos);
+                normals.push(j);
+                colors.push("orange");
+            }
+            points.push(i.pos);
+            normals.push(i.newNormal);
+            colors.push("blue");
         }
+    } else {
+        for (let i = 0; i < ico.points.length; i++) {
+            points.push(ico.points[i]);
+            normals.push(ico.normals[i]);
+            colors.push("blue");
+        }
+    }
+    for (let i = 0; i < points.length; i++) {
+        const o = objs[0];
+        const l = .2;
+        const p1 = points[i];
+        const p2 = vec3.add(vec3.create(), p1, vec3.mul(vec3.create(), vec3.normalize(vec3.create(), normals[i]), [l, l, l]));
+        const convX = (n: number) => (n + 1) * (cw / 2);
+        const convY = (n: number) => (n + 1) * (ch / 2);
+        const r1 = o.computeProjectedPosition(p1);
+        const r2 = o.computeProjectedPosition(p2);
+        if (r1[3] > 3.1) continue;
+        ctx.lineWidth = 10 / (r1[3] * 2);
+        ctx.strokeStyle = colors[i];
+        ctx.beginPath();
+        ctx.moveTo(convX(r1[0]), convY(r1[1]));
+        ctx.lineTo(convX(r2[0]), convY(r2[1]));
+        ctx.stroke();
+        ctx.closePath();
+        ctx.fillStyle = "red";
+        ctx.beginPath();
+        ctx.arc(convX(r1[0]), convY(r1[1]), 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.closePath();
+        ctx.fillStyle = "green";
+        ctx.beginPath();
+        ctx.arc(convX(r2[0]), convY(r2[1]), 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.closePath();
+        ctx.fillStyle = "orange";
+        ctx.font = "Arial 50px";
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "center";
+        ctx.fillText((Math.floor(r1[3] * 10) / 10) + "", convX(r1[0]), convY(r1[1]) + 10);
     }
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.bindTexture(gl.TEXTURE_2D, canvasOverlay.texture);
@@ -109,7 +131,7 @@ function udpateOverlayCanvas() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
 }
-
+//console.log(ico.getMesh());
 function play() {
     const fac = .01;
     let vec: vec4 = vec4.create();

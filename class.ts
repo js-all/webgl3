@@ -117,6 +117,9 @@ class Primitive {
     lightDirDifuseFac = 1;
     lightPointDiffuseFac = 1;
     lightPointSpecularFac = 1;
+    // ----
+    static tmpDebugList: { oldNormals: vec3[], newNormal: vec3, pos: vec3 }[] = [];
+    // ----
     /**
      * new Primitive
      * @param points the points of the shape
@@ -248,6 +251,7 @@ class Primitive {
      * return the mesh object representing the points of the Primitive
      */
     getMesh(): Mesh {
+
         return {
             normals: this.normals,
             points: this.points,
@@ -276,7 +280,12 @@ class Primitive {
         const { normals, points, tris } = mesh;
         const resNorms: typeof normals = [];
         const resPoints: typeof points = [];
-        const resTris: typeof tris = [...tris];
+        const resTris: typeof tris = [];
+        tris.forEach(v => {
+            resTris.push([...v]);
+        })
+        console.log(resTris)
+        resTris[0][0] = 72;
         // a map with the coords of the point (a single one because they all are the same)
         // as a key and the ids of the points as value
         const dupedPoints: Map<string, number[]> = new Map();
@@ -285,10 +294,10 @@ class Primitive {
         const redacted = (newId: number, ...oldID: number[]) => {
             // loop a lot as this method is only run once at startup
             // (if its even ran at all)
-            for(let i = 0; i < resTris.length; i++) {
-                for(let j = 0; j < 3; j++) {
-                    for(let k of oldID) {
-                        if(k === resTris[i][j]){
+            for (let i = 0; i < resTris.length; i++) {
+                for (let j = 0; j < 3; j++) {
+                    for (let k of oldID) {
+                        if (k === resTris[i][j]) {
                             resTris[i][j] = newId;
                         }
                     }
@@ -296,7 +305,7 @@ class Primitive {
             }
         }
         // fill the map with the right values
-        for(let i = 0; i < points.length; i++) {
+        for (let i = 0; i < points.length; i++) {
             // get the stringified key because of reasons mentionned above
             const p = stringify(points[i]);
             if (!dupedPoints.has(p)) {
@@ -305,6 +314,7 @@ class Primitive {
                 dupedPoints.set(p, (<number[]>dupedPoints.get(p)).concat(i));
             }
         }
+        const normalsDebugList: typeof Primitive.tmpDebugList = [];
         dupedPoints.forEach((v, k) => {
             // get back the stringified key
             const vec = fromString(k);
@@ -313,14 +323,20 @@ class Primitive {
             const resNorm = norms[0];
             // TODO: FIX THIS SHIT
             // compute the unified normal
-            for(let i = 1; i < norms.length; i++) {
-                vec3.lerp(resNorm, resNorm, norms[i], 1/norms.length);
+            for (let i = 1; i < norms.length; i++) {
+                vec3.lerp(resNorm, resNorm, norms[i], 1 / norms.length);
             }
+            normalsDebugList.push({
+                newNormal: resNorm,
+                oldNormals: norms,
+                pos: vec
+            })
             // push the results
             resPoints.push(vec);
             resNorms.push(resNorm);
-            redacted(resPoints.length-1, ...v);
+            redacted(resPoints.length - 1, ...v);
         });
+        Primitive.tmpDebugList = normalsDebugList;
         // and return
         return {
             points: resPoints,
@@ -398,7 +414,7 @@ class Primitive {
     // generate the attributes passed to the shader from the vertices and other properties
     initBuffer(): BufferData {
         const { gl } = this;
-
+        debugger;
         const positions: number[] = [];
         const PBuffer = createBuffer(gl, "position");
         this.points.forEach(v => positions.push(...v));
@@ -938,7 +954,7 @@ class Icosphere extends Primitive {
             }
             packedTrisPoints = res;
         }
-        const { tris, points } = unpackTriVecArray(packedTrisPoints);
+        const { tris: tris, points: points } = unpackTriVecArray(packedTrisPoints);
         for (let i of new Array(packedTrisPoints.length)) {
             t.push([0, 0],
                 [1, 0],
