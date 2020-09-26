@@ -179,6 +179,9 @@ class Primitive {
             throw new Error("Coudln't fetch shaders, probably a wrong url or an error in the shader itself");
         });
     }
+    /**
+     * compute the normals automatically, probably doesn't work using two triangles orientation
+     */
     computeNormals(): vec3[] {
         const res: vec3[] = <vec3[]>(new Array(this.points.length).fill([0, 0, 0]))
         for (let i of this.tris) {
@@ -228,29 +231,102 @@ class Primitive {
             this.movedPointLights = res;
         }
     }
+    /**
+     * get webglContext
+     */
     get gl() {
         return this.world.gl;
     }
-    static generateMergedVerticiesMesh(mesh: Mesh) {
+    /**
+     * merge the verticies and normals,
+     * can be used to achieve smooth shading
+     */
+    mergeVerticies() {
+        return this.setMesh(Primitive.generateMergedVerticiesMesh(this.getMesh()));
+    }
+    /**
+     * return the mesh object representing the points of the Primitive
+     */
+    getMesh(): Mesh {
+        return {
+            normals: this.normals,
+            points: this.points,
+            tris: this.tris
+        }
+    }
+    /**
+     * change the mesh
+     * @param mesh the mesh to set as the new one
+     */
+    setMesh(mesh: Mesh) {
+        this.points = mesh.points;
+        this.tris = mesh.tris;
+        this.normals = mesh.normals;
+        this.updateBuffers();
+    }
+    /**
+     * merge the vertices tris and normals of a mesh
+     */
+    static generateMergedVerticiesMesh(mesh: Mesh): Mesh {
+        // method to use string as keys rather than the arrays themselve
+        // because it would end with multiple key with the same value
+        const stringify = (input: vec3) => input.join(' ');
+        const fromString = (input: string) => input.split(' ').map(v => parseFloat(v)) as vec3;
+        // spread the input data and define the output
         const { normals, points, tris } = mesh;
-        const dupedPoints: Map<vec3, number[]> = new Map();
+        const resNorms: typeof normals = [];
+        const resPoints: typeof points = [];
+        const resTris: typeof tris = [...tris];
+        // a map with the coords of the point (a single one because they all are the same)
+        // as a key and the ids of the points as value
+        const dupedPoints: Map<string, number[]> = new Map();
+        // to edit the multples old points ids
+        // into a single new one
+        const redacted = (newId: number, ...oldID: number[]) => {
+            // loop a lot as this method is only run once at startup
+            // (if its even ran at all)
+            for(let i = 0; i < resTris.length; i++) {
+                for(let j = 0; j < 3; j++) {
+                    for(let k of oldID) {
+                        if(k === resTris[i][j]){
+                            resTris[i][j] = newId;
+                        }
+                    }
+                }
+            }
+        }
+        // fill the map with the right values
         for(let i = 0; i < points.length; i++) {
-            const p = points[i];
+            // get the stringified key because of reasons mentionned above
+            const p = stringify(points[i]);
             if (!dupedPoints.has(p)) {
                 dupedPoints.set(p, [i]);
             } else {
-                dupedPoints.set(p, <number[]>dupedPoints.get(p));
+                dupedPoints.set(p, (<number[]>dupedPoints.get(p)).concat(i));
             }
         }
         dupedPoints.forEach((v, k) => {
-            const normals: vec3[] = [];
-            const tris: number[] = [];
-            for(let)
-            for(let ti = 0; ti < tris.length; ti++) {
-                const t = tris[ti];
-                if (t[0] === )
+            // get back the stringified key
+            const vec = fromString(k);
+            // get the normal of every points
+            const norms = v.map(v => normals[v]);
+            const resNorm = norms[0];
+            // TODO: FIX THIS SHIT
+            // compute the unified normal
+            for(let i = 1; i < norms.length; i++) {
+                vec3.lerp(resNorm, resNorm, norms[i], 1/norms.length);
             }
+            // push the results
+            resPoints.push(vec);
+            resNorms.push(resNorm);
+            redacted(resPoints.length-1, ...v);
         });
+        // and return
+        return {
+            points: resPoints,
+            normals: resNorms,
+            tris: resTris
+        }
     }
     /**
      * get the 2d bonding box of the element
@@ -287,7 +363,10 @@ class Primitive {
             }
         }
     }
-    
+    /**
+     * compute the projected, 2d location of a vertex
+     * @param vertex 
+     */
     computeProjectedPosition(vertex: vec3) {
         const vec = vec4.fromValues(vertex[0], vertex[1], vertex[2], 1);
         vec4.transformMat4(vec, vec, this.modelMatrixRotationFix);
@@ -298,6 +377,7 @@ class Primitive {
         dVec[3] = w;
         return <vec4>dVec
     }
+    // get the 3d bounding box of the pirmitive
     get3dBoundingBox() {
         const Ys: number[] = [];
         const Xs: number[] = [];
@@ -315,6 +395,7 @@ class Primitive {
             max: max
         }
     }
+    // generate the attributes passed to the shader from the vertices and other properties
     initBuffer(): BufferData {
         const { gl } = this;
 
@@ -363,6 +444,7 @@ class Primitive {
             indexsLength: indexes.length
         }
     }
+    // get the location of the uniforms and attribute to pass to the webgl shader
     computeLocations() {
         // because computeLocations are only called once program shader is set;
         this.programShader = <WebGLProgram>this.programShader;
