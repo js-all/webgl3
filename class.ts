@@ -1,6 +1,6 @@
 import { mat4, vec4, vec3 } from 'gl-matrix'
 import { v4 as uuidV4 } from 'uuid';
-import { createBuffer, initShaderProgram, fetchShaders, rad } from './utils'
+import { createBuffer, initShaderProgram, fetchShaders, rad, createCubeMapTextureFromColor } from './utils'
 
 type N3 = [number, number, number];
 interface Mesh {
@@ -84,7 +84,9 @@ class Primitive {
         "uPointLightsColor", // 9
         "uReflectivity", // 10
         "uExponant", // 11
-        "uLightFac" // 12
+        "uLightFac", // 12
+        "uEnvironmentCubeMapSampler", // 13
+        "uRoughness" // 14
     ];
     reflectivity: number;
     attributesLocations: number[] = [];
@@ -117,9 +119,7 @@ class Primitive {
     lightDirDifuseFac = 1;
     lightPointDiffuseFac = 1;
     lightPointSpecularFac = 1;
-    // ----
-    static tmpDebugList: { oldNormals: vec3[], newNormal: vec3, pos: vec3 }[] = [];
-    // ----
+    roughness = 0;
     /**
      * new Primitive
      * @param points the points of the shape
@@ -153,7 +153,9 @@ class Primitive {
                 { method: UniformTypes.uniform3fv, location: 9, value: thisObj => { const res: number[] = []; thisObj.pointLights.map(v => res.push(...v.color)); while (res.length < Primitive.MAX_LIGHTS) { res.push(0, 0, 0) }; return [res] } },
                 { method: UniformTypes.uniform1f, location: 10, value: thisObj => [thisObj.reflectivity] },
                 { method: UniformTypes.uniform1i, location: 11, value: thisObj => [thisObj.exponant] },
-                { method: UniformTypes.uniform4fv, location: 12, value: thisObj => [[thisObj.lightAmbiantFac, thisObj.lightDirDifuseFac, thisObj.lightPointDiffuseFac, thisObj.lightPointSpecularFac]] }
+                { method: UniformTypes.uniform4fv, location: 12, value: thisObj => [[thisObj.lightAmbiantFac, thisObj.lightDirDifuseFac, thisObj.lightPointDiffuseFac, thisObj.lightPointSpecularFac]] },
+                { method: UniformTypes.uniform1i, location: 13, value: thisObj => [1] },
+                { method: UniformTypes.uniform1f, location: 14, value: thisObj => [thisObj.roughness] }
             ],
             indexs: <WebGLBuffer>this.gl.createBuffer(),
             indexsLength: 0
@@ -284,8 +286,7 @@ class Primitive {
         tris.forEach(v => {
             resTris.push([...v]);
         })
-        console.log(resTris)
-        resTris[0][0] = 72;
+        console.log(tris)
         // a map with the coords of the point (a single one because they all are the same)
         // as a key and the ids of the points as value
         const dupedPoints: Map<string, number[]> = new Map();
@@ -293,7 +294,7 @@ class Primitive {
         // into a single new one
         const redacted = (newId: number, ...oldID: number[]) => {
             // loop a lot as this method is only run once at startup
-            // (if its even ran at all)
+            // (if its even ran at all, it would be better for meshs to be cached than generated at startup)
             for (let i = 0; i < resTris.length; i++) {
                 for (let j = 0; j < 3; j++) {
                     for (let k of oldID) {
@@ -314,29 +315,26 @@ class Primitive {
                 dupedPoints.set(p, (<number[]>dupedPoints.get(p)).concat(i));
             }
         }
-        const normalsDebugList: typeof Primitive.tmpDebugList = [];
         dupedPoints.forEach((v, k) => {
             // get back the stringified key
             const vec = fromString(k);
             // get the normal of every points
             const norms = v.map(v => normals[v]);
-            const resNorm = norms[0];
-            // TODO: FIX THIS SHIT
+            const resNorm = vec3.create();
+            // .TODO: FIX THIS SHIT
+            //* I FUCKING DID IT
+            //* it makes no sense but im not even asking aymore
             // compute the unified normal
-            for (let i = 1; i < norms.length; i++) {
-                vec3.lerp(resNorm, resNorm, norms[i], 1 / norms.length);
+            for (let i = 0; i < norms.length; i++) {
+                vec3.add(resNorm, resNorm, norms[i]);
             }
-            normalsDebugList.push({
-                newNormal: resNorm,
-                oldNormals: norms,
-                pos: vec
-            })
+            vec3.divide(resNorm, resNorm, [norms.length, norms.length, norms.length]);
+            vec3.normalize(resNorm, resNorm);
             // push the results
             resPoints.push(vec);
             resNorms.push(resNorm);
             redacted(resPoints.length - 1, ...v);
         });
-        Primitive.tmpDebugList = normalsDebugList;
         // and return
         return {
             points: resPoints,
@@ -414,7 +412,6 @@ class Primitive {
     // generate the attributes passed to the shader from the vertices and other properties
     initBuffer(): BufferData {
         const { gl } = this;
-        debugger;
         const positions: number[] = [];
         const PBuffer = createBuffer(gl, "position");
         this.points.forEach(v => positions.push(...v));
@@ -517,6 +514,8 @@ class Primitive {
         }
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.texture);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_CUBE_MAP, this.world.environmentCubeMapTexture);
         // verry sketchy code here but ill just hope it works and if it does never touch it again
         for (let i of this.bufferData.uniforms) {
             // ingoring here because i can't tell typescript that UniformTypes properties are from gl
@@ -553,6 +552,7 @@ class World {
     private _cameraTranslation: vec3;
     objectList: Map<string, Primitive> = new Map<string, Primitive>([]);
     ambiantLight: ambiantLight = [.2, .2, .2];
+    perspectiveMethod: "perspective" | "orthographic";
     /**
      * the directional lights of the world,
      * max ammount defined in shader
@@ -580,7 +580,8 @@ class World {
     ];
     // to fix lightning not rotating with the camera
     viewRotationMatrix: mat4 = mat4.create();
-    constructor(fov: number, zNear: number, zFar: number, gl: WebGLRenderingContext, cameraRotation: vec3, cameraTranslation: vec3, ambiantLight?: ambiantLight, directionalLights: dirrectionalLight[] = [], pointLights: PointLight[] = []) {
+    environmentCubeMapTexture: WebGLTexture;
+    constructor(perspectiveMethode: "perspective" | "orthographic", fov: number, zNear: number, zFar: number, gl: WebGLRenderingContext, cameraRotation: vec3, cameraTranslation: vec3, ambiantLight?: ambiantLight, directionalLights: dirrectionalLight[] = [], pointLights: PointLight[] = [], environmentCubeMapTexture?: WebGLTexture) {
         this._fov = fov;
         this._zNear = zNear;
         this._zFar = zFar;
@@ -589,11 +590,21 @@ class World {
         this._aspect = this.canvas.clientWidth / this.canvas.clientHeight;
         this._cameraRotation = cameraRotation;
         this._cameraTranslation = cameraTranslation;
+        this.perspectiveMethod = perspectiveMethode;
         if (ambiantLight !== undefined)
             this.ambiantLight = ambiantLight;
         //? why the concat ???
         this.directionalLights = this.directionalLights.concat(...directionalLights);
         this.pointLights = pointLights;
+        const ECMT = environmentCubeMapTexture || createCubeMapTextureFromColor(gl, {
+            nx: [255, 255, 255, 255],
+            ny: [255, 255, 255, 255],
+            nz: [255, 255, 255, 255],
+            px: [255, 255, 255, 255],
+            py: [255, 255, 255, 255],
+            pz: [255, 255, 255, 255],
+        });
+        this.environmentCubeMapTexture = ECMT;
         this.updateValues();
     }
     addPreRenderInstruction(...func: ((gl: WebGLRenderingContext) => any)[]) {
@@ -604,7 +615,11 @@ class World {
         //! vec3.inverse turn a [0 , 0, 0] vector to [Infinity, Infinity, Infinity]
         const reverseCTrans = vec3.mul(vec3.create(), this.cameraTranslation, [-1, -1, -1]);
         const reverseCRot = vec3.mul(vec3.create(), this.cameraRotation, [-1, -1, -1]);
-        mat4.perspective(this.projectionMatrix, this.fov, this.aspect, this.zNear, this.zFar);
+        if (this.perspectiveMethod === "orthographic") {
+            mat4.ortho(this.projectionMatrix, -1, 1, -1, 1, this.zNear, this.zFar);
+        } else {
+            mat4.perspective(this.projectionMatrix, this.fov, this.aspect, this.zNear, this.zFar);
+        }
         this.viewRotationMatrix = mat4.create();
         this.viewMatrix = mat4.create();
         mat4.identity(this.viewRotationMatrix);

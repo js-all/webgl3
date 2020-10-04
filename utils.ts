@@ -19,6 +19,26 @@ async function fetchShaders(vShaderUrl: string, fShaderUrl: string) {
     }
 }
 
+interface cubeMapUrlTexture {
+    px: string,
+    py: string,
+    pz: string,
+    nx: string,
+    ny: string,
+    nz: string
+}
+
+type _color = [number, number, number, number]
+
+interface cubeMapColor {
+    px: _color,
+    py: _color,
+    pz: _color,
+    nx: _color,
+    ny: _color
+    nz: _color
+}
+
 function initShaderProgram(gl: WebGLRenderingContext, vsSource: string, fsSource: string) {
     const vShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);
     const fShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
@@ -71,7 +91,7 @@ function loadTexture(gl: WebGLRenderingContext, url: string) {
     const srcFormat = gl.RGBA;
     const srcType = gl.UNSIGNED_BYTE;
     const pixel = new Uint8Array([0, 0, 255, 255]);
-    gl.texImage2D(gl.TEXTURE_2D, level, width, height, border, interalFormat, srcFormat, srcType, pixel);
+    gl.texImage2D(gl.TEXTURE_2D, level, interalFormat, width, height, border, srcFormat, srcType, pixel);
     const image = new Image();
     image.onload = () => {
         gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -88,6 +108,58 @@ function loadTexture(gl: WebGLRenderingContext, url: string) {
     image.src = url;
     return texture
 }
+
+function loadCubeMapTexture(gl: WebGLRenderingContext, urls: cubeMapUrlTexture, powerOf2: boolean) {
+    const texture = gl.createTexture();
+    if (texture === null) throw new TypeError('texture is null in loadCubeMapTexture')
+    gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
+    const faceInfo = [
+        {target: gl.TEXTURE_CUBE_MAP_NEGATIVE_X, url: urls.nx},
+        {target: gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, url: urls.ny},
+        {target: gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, url: urls.nz},
+        {target: gl.TEXTURE_CUBE_MAP_POSITIVE_X, url: urls.px},
+        {target: gl.TEXTURE_CUBE_MAP_POSITIVE_Y, url: urls.py},
+        {target: gl.TEXTURE_CUBE_MAP_POSITIVE_Z, url: urls.pz}
+    ]
+    faceInfo.forEach(info => {
+        gl.texImage2D(info.target, 0,gl.RGBA,  1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 255, 255]))
+        const image = new Image();
+        image.onload = () => {
+            gl.texImage2D(info.target, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+            if(isPowerOf2(image.width) && isPowerOf2(image.height)) {
+                gl.generateMipmap(gl.TEXTURE_CUBE_MAP);
+                gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            } else {
+                gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            }
+        }
+        image.src = info.url;
+    });
+    return texture;
+}
+
+function createCubeMapTextureFromColor(gl: WebGLRenderingContext, color: cubeMapColor) {
+    const texture = gl.createTexture();
+    if (texture === null) throw new TypeError('texture is null in loadCubeMapTexture')
+    gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
+    const faceInfo = [
+        {target: gl.TEXTURE_CUBE_MAP_NEGATIVE_X, color: color.nx},
+        {target: gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, color: color.ny},
+        {target: gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, color: color.nz},
+        {target: gl.TEXTURE_CUBE_MAP_POSITIVE_X, color: color.px},
+        {target: gl.TEXTURE_CUBE_MAP_POSITIVE_Y, color: color.py},
+        {target: gl.TEXTURE_CUBE_MAP_POSITIVE_Z, color: color.pz}
+    ]
+    faceInfo.forEach(info => {
+        gl.texImage2D(info.target, 0,gl.RGBA,  1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(info.color));
+    });
+    gl.generateMipmap(gl.TEXTURE_CUBE_MAP);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    return texture;
+}
+
 // definitly did not steal that code
 const isPowerOf2 = (n: number) => (n & (n - 1)) == 0;
 /**
@@ -143,5 +215,7 @@ export {
     rad,
     fetchShaders,
     createTextureFromCanvas,
-    deg
+    deg,
+    loadCubeMapTexture,
+    createCubeMapTextureFromColor
 }

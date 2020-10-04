@@ -14,6 +14,8 @@
   uniform highp float uReflectivity;
   uniform highp int uExponant;
   uniform highp vec4 uLightFac;
+  uniform samplerCube uEnvironmentCubeMapSampler;
+  uniform highp float uRoughness;
 
 void main() {
   highp vec4 texelColor = texture2D(uSampler, vTextureCoord);
@@ -46,6 +48,12 @@ void main() {
     pSpecular += uReflectivity * spec * uPointLightsColor[j];
   }
   highp vec3 light = (uAmbiantLight * vec3(uLightFac.x)) + (dDiffuse * vec3(uLightFac.y)) + (pDiffuse * vec3(uLightFac.z)) + (pSpecular * vec3(uLightFac.w));
-  gl_FragColor = vec4(texelColor.rgb * (light), texelColor.a);
-  //gl_FragColor = vec4(vec3(dot(normal, normalize(-vFragPos))), 1) ;
+  if (uRoughness > 0.0 && uRoughness < 1.0) {
+    gl_FragColor = vec4(texelColor.rgb * (light), texelColor.a) * vec4(1.0 - uRoughness);
+    gl_FragColor += vec4(textureCube(uEnvironmentCubeMapSampler, reflect(viewDir, normal)).xyz, 255) * vec4(uRoughness);
+  } else if (uRoughness >= 1.0) {
+    gl_FragColor += vec4(textureCube(uEnvironmentCubeMapSampler, reflect(viewDir, normal)).xyz, 255);  
+  } else {
+    gl_FragColor = vec4(texelColor.rgb * (light), texelColor.a);
+  }
 }
