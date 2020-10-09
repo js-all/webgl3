@@ -40,10 +40,12 @@ const world = new H3D.World("perspective", rad(45), .1, 100, gl, [rad(-180), rad
     position: [5, -5, -2]
 }], cubeMap);
 
-// const ico = new H3D.Icosphere(world, false, shaders.vert, shaders.frag, 4, utils.createTextureFromColor(gl, [0, 0, 255, 255]), .5, [0, 0, 0], [.5, .5, .5]);
-const cube = new H3D.Cube(world, shaders.vert, shaders.frag, utils.createTextureFromColor(gl, [128, 128, 128, 255]), 1, [0, 0, 0], [.5, .5, .5]);
+// const cube = new H3D.Cube(world, shaders.vert, shaders.frag, utils.createTextureFromColor(gl, [128, 128, 128, 255]), 1, [0, 0, 0], [.5, .5, .5]);
 // cube.mergeVerticies()
-// ico.mergeVerticies()
+// cube.roughness = 0;
+const ico = new H3D.Icosphere(world, false, shaders.vert, shaders.frag, 2, utils.createTextureFromColor(gl, [0, 0, 255, 255]), .5, [0, 0, 0], [.5, .5, .5]);
+ico.mergeVerticies()
+// ico.roughness = 0.1;
 document.body.appendChild(canvas)
 let i = 0;
 world.aspect = cw / ch;
@@ -99,7 +101,7 @@ window.addEventListener('mousemove', e => {
         mousePos.y += e.movementY * canvas.height / canvas.clientHeight;
     }
     world.cameraRotation[1] = mousePos.x / canvas.width * (Math.PI * 2) * sensibility;
-    world.cameraRotation[0] = (mousePos.y+ch) / canvas.height * (Math.PI * 2) * -1 * sensibility;
+    world.cameraRotation[0] = (mousePos.y + ch) / canvas.height * (Math.PI * 2) * -1 * sensibility;
 });
 var captured = false;
 canvas.addEventListener('click', e => {

@@ -273,11 +273,7 @@ class Primitive {
     /**
      * merge the vertices tris and normals of a mesh
      */
-    static generateMergedVerticiesMesh(mesh: Mesh): Mesh {
-        // method to use string as keys rather than the arrays themselve
-        // because it would end with multiple key with the same value
-        const stringify = (input: vec3) => input.join(' ');
-        const fromString = (input: string) => input.split(' ').map(v => parseFloat(v)) as vec3;
+    static generateMergedVerticiesMesh(mesh: Mesh, mergeTreshold: number = 0.01): Mesh {
         // spread the input data and define the output
         const { normals, points, tris } = mesh;
         const resNorms: typeof normals = [];
@@ -289,7 +285,7 @@ class Primitive {
         console.log(tris)
         // a map with the coords of the point (a single one because they all are the same)
         // as a key and the ids of the points as value
-        const dupedPoints: Map<string, number[]> = new Map();
+        const dupedPoints: Map<vec3, number[]> = new Map();
         // to edit the multples old points ids
         // into a single new one
         const redacted = (newId: number, ...oldID: number[]) => {
@@ -307,17 +303,21 @@ class Primitive {
         }
         // fill the map with the right values
         for (let i = 0; i < points.length; i++) {
-            // get the stringified key because of reasons mentionned above
-            const p = stringify(points[i]);
-            if (!dupedPoints.has(p)) {
-                dupedPoints.set(p, [i]);
-            } else {
-                dupedPoints.set(p, (<number[]>dupedPoints.get(p)).concat(i));
+            let found = false;
+            dupedPoints.forEach((v, k) => {
+                if(vec3.len(vec3.sub(vec3.create(), points[i], k)) <= mergeTreshold) {
+                    dupedPoints.set(k, (<number[]>dupedPoints.get(k)).concat(i));
+                    found = true;
+                }
+            });
+            if(!found) {
+                dupedPoints.set(points[i], [i]);
             }
+
         }
         dupedPoints.forEach((v, k) => {
             // get back the stringified key
-            const vec = fromString(k);
+            const vec = k;
             // get the normal of every points
             const norms = v.map(v => normals[v]);
             const resNorm = vec3.create();
@@ -597,12 +597,12 @@ class World {
         this.directionalLights = this.directionalLights.concat(...directionalLights);
         this.pointLights = pointLights;
         const ECMT = environmentCubeMapTexture || createCubeMapTextureFromColor(gl, {
-            nx: [255, 255, 255, 255],
-            ny: [255, 255, 255, 255],
-            nz: [255, 255, 255, 255],
-            px: [255, 255, 255, 255],
-            py: [255, 255, 255, 255],
-            pz: [255, 255, 255, 255],
+            nx: [0, 0, 0, 255],
+            ny: [0, 0, 0, 255],
+            nz: [0, 0, 0, 255],
+            px: [0, 0, 0, 255],
+            py: [0, 0, 0, 255],
+            pz: [0, 0, 0, 255],
         });
         this.environmentCubeMapTexture = ECMT;
         this.updateValues();
