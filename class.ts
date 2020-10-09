@@ -188,21 +188,7 @@ class Primitive {
      * compute the normals automatically, probably doesn't work using two triangles orientation
      */
     computeNormals(): vec3[] {
-        const res: vec3[] = <vec3[]>(new Array(this.points.length).fill([0, 0, 0]))
-        for (let i of this.tris) {
-            // just to be able to copy what told on stackoverflow im desparate here
-            // https://stackoverflow.com/questions/29488574/how-to-calculate-normals-for-an-Icosphere/44351078
-            const v = (v: number) => this.points[i[v - 1]];
-            const p12 = vec3.subtract(vec3.create(), v(2), v(1));
-            const p23 = vec3.subtract(vec3.create(), v(3), v(2));
-            const n = vec3.cross(vec3.create(), p12, p23);
-            const l = vec3.len(n);
-            vec3.div(n, n, vec3.fromValues(l, l, l));
-            res[i[0]] = n;
-            res[i[1]] = n;
-            res[i[2]] = n;
-        }
-        return res;
+        return Primitive.computeMeshNormals(this.getMesh());
     }
     /**
      * called to update the model matrix or by the world to update modelViewMatrix
@@ -248,6 +234,13 @@ class Primitive {
      */
     mergeVerticies() {
         return this.setMesh(Primitive.generateMergedVerticiesMesh(this.getMesh()));
+    }
+    /**
+     * divide verticies and recompute the normals,
+     * can be use to achieve flat shading
+     */
+    duplicateVerticies() {
+        return this.setMesh(Primitive.generateDupedVerticiesMesh(this.getMesh()));
     }
     /**
      * return the mesh object representing the points of the Primitive
@@ -341,6 +334,57 @@ class Primitive {
             normals: resNorms,
             tris: resTris
         }
+    }
+    /**
+     * divide verticies and tris and recompute normals
+     * @param mesh the mesh to divide verticies of
+     */
+    static generateDupedVerticiesMesh(mesh: Mesh) {
+        const resTris: [vec3, vec3, vec3][] = [];
+        const {points} = mesh;
+        for(let i of mesh.tris) {
+            resTris.push([points[i[0]], points[i[1]], points[i[2]]]);
+        }
+        const resTV = unpackTriVecArray(resTris);
+        const resMesh: Mesh = {
+            normals: Primitive.computeMeshNormals(resTV as Mesh),
+            points: resTV.points,
+            tris: resTV.tris
+        };
+        return resMesh;
+    }
+    /**
+     * automatically compute normals
+     * @param mesh mesh of the normals to compute
+     */
+    static computeMeshNormals(mesh: Mesh) {
+        debugger;
+        const res: vec3[][] = <vec3[][]>(new Array(mesh.points.length).fill([]))
+        for (let i of mesh.tris) {
+            // just to be able to copy what told on stackoverflow im desparate here
+            // https://stackoverflow.com/questions/29488574/how-to-calculate-normals-for-an-Icosphere/44351078
+            const v = (v: number) => mesh.points[i[v - 1]];
+            const p12 = vec3.subtract(vec3.create(), v(2), v(1));
+            const p23 = vec3.subtract(vec3.create(), v(3), v(2));
+            const n = vec3.cross(vec3.create(), p12, p23);
+            const l = vec3.len(n);
+            vec3.div(n, n, vec3.fromValues(l, l, l));
+            res[0].push(2);
+            res[i[1]].push(1);
+            res[i[2]].push(1);
+            console.log(i[0])
+        }
+        console.log(mesh)
+        console.log(res)
+        return res.map(val => {
+            const vec = vec3.create();
+            for(let i of val) {
+                vec3.add(vec, vec, i);
+            }
+            vec3.div(vec, vec, [val.length,val.length,val.length]);
+            vec3.normalize(vec, vec);
+            return vec;
+        });
     }
     /**
      * get the 2d bonding box of the element

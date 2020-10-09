@@ -43,9 +43,9 @@ const world = new H3D.World("perspective", rad(45), .1, 100, gl, [rad(-180), rad
 // const cube = new H3D.Cube(world, shaders.vert, shaders.frag, utils.createTextureFromColor(gl, [128, 128, 128, 255]), 1, [0, 0, 0], [.5, .5, .5]);
 // cube.mergeVerticies()
 // cube.roughness = 0;
-const ico = new H3D.Icosphere(world, false, shaders.vert, shaders.frag, 2, utils.createTextureFromColor(gl, [0, 0, 255, 255]), .5, [0, 0, 0], [.5, .5, .5]);
-ico.mergeVerticies()
-// ico.roughness = 0.1;
+const ico = new H3D.Icosphere(world, false, shaders.vert, shaders.frag, 0, utils.loadTexture(gl, "/img/stone.png"), .5, [0, 0, 0], [.5, .5, .5]);
+// ico.mergeVerticies()
+ico.roughness = 0;
 document.body.appendChild(canvas)
 let i = 0;
 world.aspect = cw / ch;
