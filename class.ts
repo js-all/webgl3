@@ -358,8 +358,7 @@ class Primitive {
      * @param mesh mesh of the normals to compute
      */
     static computeMeshNormals(mesh: Mesh) {
-        debugger;
-        const res: vec3[][] = <vec3[][]>(new Array(mesh.points.length).fill([]))
+        const res: vec3[][] = <vec3[][]>(new Array(mesh.points.length).fill([]).map(v => []))
         for (let i of mesh.tris) {
             // just to be able to copy what told on stackoverflow im desparate here
             // https://stackoverflow.com/questions/29488574/how-to-calculate-normals-for-an-Icosphere/44351078
@@ -369,13 +368,11 @@ class Primitive {
             const n = vec3.cross(vec3.create(), p12, p23);
             const l = vec3.len(n);
             vec3.div(n, n, vec3.fromValues(l, l, l));
-            res[0].push(2);
-            res[i[1]].push(1);
-            res[i[2]].push(1);
+            res[i[0]].push(n);
+            res[i[1]].push(n);
+            res[i[2]].push(n);
             console.log(i[0])
         }
-        console.log(mesh)
-        console.log(res)
         return res.map(val => {
             const vec = vec3.create();
             for(let i of val) {
